@@ -90,19 +90,31 @@ def q_values(
     return out
 
 
-def base_peptide_rows(rs: ResultSet, base_peptide_id: int) -> pd.DataFrame:
+def base_peptide_rows(
+    rs: ResultSet,
+    base_peptide_id: int,
+    *,
+    entrapment: tuple[str, dict] | None = None,
+) -> pd.DataFrame:
     """Every pooled scored row of one base peptide (targets and decoys, all runs).
 
     Columns include ``file_row_number`` (the engine's tie-break order) and ``run``.
+    ``entrapment`` is the spike-in test as (SQL expression, named parameters), from
+    :func:`mumdia_viewer.data.entrapment.entrapment_expr`; it adds ``is_entrapment``.
     """
-    path = sql_path(rs.scored.require())
+    params: dict = {"path": sql_path(rs.scored.require()), "bpid": int(base_peptide_id)}
+    extra = ""
+    if entrapment is not None:
+        expr, ent_params = entrapment
+        extra = f", {expr} AS is_entrapment"
+        params.update(ent_params)
     df = rs.duck.df(
         "SELECT file_row_number, source, candidate_id, peptidoform, charge, label, protein, "
         "protein_group, score, prelim_score, q_value, run_psm_q, precursor_q, "
-        "peptide_q_value, pg_q_value, apex_rt "
-        "FROM read_parquet(?, file_row_number = true) WHERE base_peptide_id = ? "
+        f"peptide_q_value, pg_q_value, apex_rt{extra} "
+        "FROM read_parquet($path, file_row_number = true) WHERE base_peptide_id = $bpid "
         "ORDER BY score DESC",
-        [path, int(base_peptide_id)],
+        params,
     )
     names = {r.index: r.label for r in rs.runs}
     df["run"] = df["source"].map(lambda s: names.get(int(s), str(s)))
@@ -139,7 +151,7 @@ def competition(
     candidate_id: int,
     base_peptide_id: int,
     *,
-    entrapment_flags: pd.Series | None = None,
+    entrapment: tuple[str, dict] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, bool | None]]:
     """The base-peptide competition of one scored row and its winner flags.
 
@@ -147,9 +159,10 @@ def competition(
     the winner flag of this row for ``peptide_q_value`` and ``precursor_q``. The
     precursor group is a subset of the base-peptide rows, so one query serves both.
     """
-    df = base_peptide_rows(rs, base_peptide_id)
+    df = base_peptide_rows(rs, base_peptide_id, entrapment=entrapment)
+    flags_col = df["is_entrapment"].astype(bool) if entrapment is not None else None
     df["is_this_row"] = (df["source"] == source) & (df["candidate_id"] == candidate_id)
-    win = winner_index(df, entrapment=entrapment_flags)
+    win = winner_index(df, entrapment=flags_col)
     df["wins_peptide"] = df.index == win
     df["wins_precursor"] = False
     flags: dict[str, bool | None] = {"peptide_q_value": None, "precursor_q": None}
@@ -158,7 +171,7 @@ def competition(
         flags["peptide_q_value"] = bool(this["wins_peptide"].iloc[0])
         key = (this["peptidoform"].iloc[0], int(this["charge"].iloc[0]))
         group = df[(df["peptidoform"] == key[0]) & (df["charge"] == key[1])]
-        pwin = winner_index(group, entrapment=entrapment_flags)
+        pwin = winner_index(group, entrapment=flags_col)
         df.loc[df.index == pwin, "wins_precursor"] = True
         flags["precursor_q"] = bool(df.loc[this.index[0], "wins_precursor"])
     return df, flags
