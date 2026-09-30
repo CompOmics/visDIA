@@ -38,6 +38,19 @@ class RescoreInfo:
         return text
 
 
+def _competed_artifacts(rs: ResultSet):
+    """Competed tables whose report records the grouping: run level first, then bands."""
+    for run in rs.runs:
+        competed = run.artifact("psms_competed")
+        if competed is not None:
+            yield competed
+        if run.grouped is not None:
+            for band in run.grouped.bands:
+                competed = band.artifact("psms_competed")
+                if competed is not None:
+                    yield competed
+
+
 def _requested_matches(requested: str | None, ran: str | None) -> bool:
     if not requested or not ran:
         return True
@@ -62,9 +75,8 @@ def rescore_info(rs: ResultSet) -> RescoreInfo:
         "entrapment" if classifier and str(classifier).startswith("entrapment") else "target_decoy"
     )
     group_by, source = None, None
-    for run in rs.runs:
-        competed = run.artifact("psms_competed")
-        if competed is not None and competed.report is not None:
+    for competed in _competed_artifacts(rs):
+        if competed.report is not None:
             value = competed.report.params.get("group_by")
             if value is not None:
                 group_by, source = str(value), f"{competed.report.path.name} params.group_by"
