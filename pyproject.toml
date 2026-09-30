@@ -39,6 +39,7 @@ packages = ["src/mumdia_viewer"]
 line-length = 100
 target-version = "py311"
 src = ["src", "tests"]
+extend-exclude = ["tests/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]

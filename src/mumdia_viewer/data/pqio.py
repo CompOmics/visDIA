@@ -155,7 +155,8 @@ class ParquetHandle:
         present = self._present(columns)
         key = None
         if cached:
-            key = (str(self.path), self.stamp, index, tuple(present) if present is not None else None)
+            cols = tuple(present) if present is not None else None
+            key = (str(self.path), self.stamp, index, cols)
             hit = ROW_GROUP_CACHE.get(key)
             if hit is not None:
                 return hit

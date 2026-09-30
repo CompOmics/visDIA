@@ -134,8 +134,9 @@ class CandidateIndex:
         rg_offsets = handle.row_group_offsets()
         if not ids_parts:
             empty = np.zeros(0, dtype=np.int64)
-            return cls(empty.astype(np.uint32), empty, empty, rg_offsets, file_sorted=True,
-                       contiguous=True)
+            return cls(
+                empty.astype(np.uint32), empty, empty, rg_offsets, file_sorted=True, contiguous=True
+            )
         ids = np.concatenate(ids_parts)
         starts = np.concatenate(start_parts).astype(np.int64)
         stops = np.concatenate([starts[1:], np.array([pos], dtype=np.int64)])
