@@ -241,20 +241,12 @@ ARTIFACT_COLUMNS = [
 
 
 def _scope_dir(rs: ResultSet, scope: str) -> str:
-    """The directory of a ResultSet scope label, relative to the opened root.
+    """The directory of a ResultSet scope, relative to the opened root (``.`` for the root).
 
-    ``all_artifacts`` labels a single run's artifacts ``''`` or ``run`` and its bands
-    ``run/gNN``; an experiment's runs by name and their bands ``<run>/gNN``.
+    ``all_artifacts`` yields each artifact's directory relative to the root: ``""``,
+    ``<run>``, ``groups/gNN`` or ``<run>/groups/gNN``.
     """
-    if scope in ("", "."):
-        return "."
-    head, _, band = scope.partition("/")
-    base = head
-    if not rs.is_experiment and rs.runs and head == rs.runs[0].label:
-        base = "."
-    if band:
-        return f"groups/{band}" if base == "." else f"{base}/groups/{band}"
-    return base
+    return "." if scope in ("", ".") else scope
 
 
 def _unique_artifacts(rs: ResultSet) -> list[tuple[str, Artifact]]:

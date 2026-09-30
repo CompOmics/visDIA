@@ -30,6 +30,19 @@ class RescoreInfo:
     group_by_source: str | None
 
     @property
+    def group_by_display(self) -> str | None:
+        """The competition key in the configuration's spelling (``peptidoform_charge``)."""
+        if self.group_by is None:
+            return None
+        known = {
+            "peptidoformcharge": "peptidoform_charge",
+            "basepeptide": "base_peptide",
+            "precursor": "precursor (base_peptide_id)",
+            "apex": "apex",
+        }
+        return known.get(normalise_enum(self.group_by), self.group_by)
+
+    @property
     def label(self) -> str:
         ran = self.classifier or "unknown"
         text = f"{ran} ({self.mode.replace('_', '-')} q values)"

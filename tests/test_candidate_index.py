@@ -131,3 +131,30 @@ def test_candidate_crossing_a_row_group_seam(tmp_path: Path):
     index = CandidateIndex.build(handle)
     assert index.rows(1) == (0, 3) and index.rows(2) == (3, 5)
     assert [(s.row_group, s.start, s.stop) for s in index.segments(2)] == [(1, 1, 2), (2, 0, 1)]
+
+
+def test_out_of_range_ids_are_absent(open_fixture):
+    index = CandidateIndex.build(open_fixture("single").runs[0].artifact("chromatograms").parquet())
+    for cid in (-1, 2**32, 2**40):
+        assert cid not in index and index.ranges(cid) == [] and index.rows(cid) is None
+
+
+def test_a_replaced_file_with_the_old_hash_rebuilds_the_index(fixture_dir, tmp_path: Path):
+    import shutil
+
+    from mumdia_viewer.data import open_results
+
+    copy = tmp_path / "run"
+    shutil.copytree(fixture_dir("single"), copy)
+    cache = Cache(tmp_path / "cache")
+    artifact = open_results(copy, cache=cache).runs[0].artifact("run_windows")
+    first = CandidateIndex.for_artifact(artifact, cache)
+    # Rewrite the table with the same row count but other ids; the manifest keeps the
+    # old content hash, so only the footer digest can tell the files apart.
+    table = pq.read_table(artifact.path)
+    ids = table.column("candidate_id").to_numpy()[::-1].copy()
+    table = table.set_column(0, "candidate_id", pa.array(ids, pa.uint32()))
+    pq.write_table(table, artifact.path)
+    reopened = open_results(copy, cache=Cache(tmp_path / "cache")).runs[0].artifact("run_windows")
+    second = CandidateIndex.for_artifact(reopened, Cache(tmp_path / "cache"))
+    assert first.file_sorted and not second.file_sorted

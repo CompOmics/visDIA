@@ -670,10 +670,11 @@ def test_mixed_layout_columns_are_refused(fixture_dir, tmp_path):
     with pytest.raises(LayoutError, match="neither chromatogram layout"):
         ChromatogramSource.for_run(rs, rs.runs[0])
     # Without a recorded version, discovery infers one from the columns and records the
-    # refusal on the artifact; require() raises it.
+    # refusal on the artifact; require() raises it as a layout error, not a version error.
     replace_chromatograms(run_dir, mixed, None)
     rs = open_results(run_dir)
-    with pytest.raises(SchemaVersionError, match="neither chromatogram layout"):
+    assert "layout" in rs.notice_codes()
+    with pytest.raises(LayoutError, match="neither chromatogram layout"):
         ChromatogramSource.for_run(rs, rs.runs[0])
 
 

@@ -234,3 +234,51 @@ def test_real_experiment(real_experiment):
     assert rs.kind == "experiment" and len(rs.runs) >= 2
     assert all(r.has("chromatograms") for r in rs.runs)
     assert os.path.basename(rs.scored.path) == "scored_combined.parquet"
+
+
+def test_run_lookup_accepts_numpy_integers(open_fixture):
+    import numpy as np
+
+    rs = open_fixture("experiment")
+    assert rs.run(np.uint32(1)).name == "b" and rs.run(np.int64(0)).name == "a"
+    assert rs.run(rs.runs[0]) is rs.runs[0]
+    with pytest.raises(KeyError):
+        rs.run(True)
+    with pytest.raises(KeyError):
+        rs.run(7)
+
+
+def test_memo_computes_once(open_fixture):
+    rs = open_fixture("single")
+    calls = []
+    assert rs.memo(("test", 1), lambda: calls.append(1) or 42) == 42
+    assert rs.memo(("test", 1), lambda: calls.append(1) or 43) == 42
+    assert calls == [1]
+
+
+def test_missing_artifact_error_names_the_expected_path(fixture_dir, tmp_path: Path):
+    copy = _copy(fixture_dir("single"), tmp_path / "run")
+    (copy / "run_windows.parquet").unlink()
+    rs = open_results(copy)
+    with pytest.raises(ArtifactNotFound) as err:
+        rs.runs[0].artifact("run_windows").require()
+    assert str(copy / "run_windows.parquet") in str(err.value)
+
+
+def test_stale_mbr_files_are_reported(fixture_dir, tmp_path: Path):
+    copy = _copy(fixture_dir("experiment"), tmp_path / "exp")
+    shutil.copy(fixture_dir("mbr") / "mbr_transferred.parquet", copy / "mbr_transferred.parquet")
+    rs = open_results(copy)
+    assert "stale_mbr" in rs.notice_codes()
+
+
+def test_all_artifacts_yields_each_artifact_once_with_its_directory(open_fixture):
+    rs = open_fixture("grouped")
+    scopes = {}
+    ids = [id(a) for _, a in rs.all_artifacts()]
+    assert len(ids) == len(set(ids))
+    for scope, a in rs.all_artifacts():
+        scopes.setdefault(scope, set()).add(a.kind)
+    assert "" in scopes and "groups/g00" in scopes and "chromatograms" in scopes["groups/g01"]
+    exp = open_fixture("experiment")
+    assert {s for s, _ in exp.all_artifacts()} >= {"", "a", "b"}

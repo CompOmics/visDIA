@@ -39,6 +39,9 @@ class DuckDB:
         if temp_directory is not None:
             self._con.execute(f"SET temp_directory = '{sql_path(temp_directory)}'")
         self._con.execute("SET enable_progress_bar = false")
+        # Keeps parsed footers between queries. It holds no file handle (a rename onto the
+        # path succeeds) and re-reads a file whose modification time changed.
+        self._con.execute("SET parquet_metadata_cache = true")
         self._local = threading.local()
         self._lock = threading.Lock()
 

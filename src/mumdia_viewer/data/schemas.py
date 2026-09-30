@@ -190,7 +190,9 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
         "precursor_mz",
         "prelim_score",
     ),
-    "chromatograms": ("candidate_id", "frag_name", "frag_mz", "frag_obs_mz", "predicted_intensity"),
+    # frag_mz and frag_obs_mz are optional for the engine's reader (frag_obs_mz falls
+    # back to frag_mz), so the decoder handles their absence.
+    "chromatograms": ("candidate_id", "frag_name", "predicted_intensity"),
     "run_windows": ("candidate_id", "rt_pred_cal", "rt_lo", "rt_hi"),
     "seed_psms": (
         "candidate_id",

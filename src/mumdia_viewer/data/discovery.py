@@ -16,17 +16,21 @@ Nothing here writes to the directory.
 
 from __future__ import annotations
 
+import operator
 import os
 import re
-from collections.abc import Iterable, Iterator, Mapping
+import threading
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from .artifacts import Artifact, Status
 from .cache import Cache
 from .duck import DuckDB
-from .errors import NotAResultDirectory, SchemaVersionError
+from .errors import LayoutError, NotAResultDirectory, SchemaVersionError, ViewerError
 from .manifest import ArtifactRecord, Manifest, band_index, load_manifest, split_key
 from .paths import PathResolver
 from .reports import Report, StageTiming, load_json, load_report, stage_timings
@@ -171,6 +175,7 @@ class ResultSet:
         self.duck = duck
         self.allow_unreleased = allow_unreleased
         self._memo: dict[Any, Any] = {}
+        self._memo_lock = threading.Lock()
 
     def __repr__(self) -> str:
         return f"ResultSet({self.kind}, {self.root}, runs={[r.label for r in self.runs]})"
@@ -186,34 +191,70 @@ class ResultSet:
     def config_get(self, *keys: str, default: Any = None) -> Any:
         return self.manifest.config_get(*keys, default=default)
 
-    def run(self, key: str | int) -> Run:
-        """A run by name or by ``source`` index."""
-        for r in self.runs:
-            if (isinstance(key, int) and r.index == key) or (
-                isinstance(key, str) and r.name == key
-            ):
-                return r
+    def run(self, key: str | int | Run) -> Run:
+        """A run by name, by ``source`` index (any integer type) or the Run itself."""
+        if isinstance(key, Run):
+            return key
+        if isinstance(key, str):
+            for r in self.runs:
+                if r.name == key:
+                    return r
+        elif not isinstance(key, bool | np.bool_):
+            try:
+                index = operator.index(key)
+            except TypeError:
+                index = None
+            if index is not None:
+                for r in self.runs:
+                    if r.index == index:
+                        return r
         raise KeyError(f"no run {key!r}; runs are {[r.label for r in self.runs]}")
+
+    def memo(self, key: Any, factory: Callable[[], Any]) -> Any:
+        """A value memoised on this result set, computed once under a lock.
+
+        The memo lives as long as the ResultSet; open the directory again to see files
+        the engine has rewritten since.
+        """
+        with self._memo_lock:
+            if key in self._memo:
+                return self._memo[key]
+        value = factory()
+        with self._memo_lock:
+            return self._memo.setdefault(key, value)
 
     def artifact(self, kind: str) -> Artifact | None:
         """An experiment-level artifact (``lfq_maxlfq``, ``mbr_transferred``, libraries...)."""
         return self.extra.get(kind)
 
     def all_artifacts(self) -> Iterator[tuple[str, Artifact]]:
-        """Every discovered artifact with the name of its scope (run or band)."""
-        yield "", self.scored
-        if self.scored_for_quant is not None:
-            yield "", self.scored_for_quant
-        for a in self.extra.values():
-            yield "", a
+        """Every discovered artifact once, with its directory relative to the root.
+
+        The directory is ``""`` for the result-set root (a single run's own directory),
+        the run name for an experiment run, and ``groups/gNN`` or ``<run>/groups/gNN``
+        for a band.
+        """
+        seen: set[int] = set()
+
+        def fresh(a: Artifact) -> bool:
+            if id(a) in seen:
+                return False
+            seen.add(id(a))
+            return True
+
+        for a in (self.scored, self.scored_for_quant, *self.extra.values()):
+            if a is not None and fresh(a):
+                yield "", a
         for run in self.runs:
+            prefix = f"{run.name}/" if run.name else ""
             for a in run.artifacts.values():
-                if a is not self.scored:
-                    yield run.label, a
+                if fresh(a):
+                    yield run.name, a
             if run.grouped is not None:
                 for band in run.grouped.bands:
                     for a in band.artifacts.values():
-                        yield f"{run.label}/{band.name}", a
+                        if fresh(a):
+                            yield f"{prefix}groups/{band.name}", a
 
     def stage_timings(self) -> list[StageTiming]:
         """Stage wall times from the reports, grouped by (directory, stage)."""
@@ -311,8 +352,14 @@ class _Builder:
         if artifact.present:
             try:
                 artifact.infer_version_if_unrecorded()
+            except LayoutError as exc:  # the footer was read; the columns match no layout
+                artifact.error = str(exc)
+                artifact.error_class = LayoutError
+                self.notice("layout", artifact.error)
+                return artifact
             except Exception as exc:  # an unreadable footer: keep the artifact, record why
                 artifact.error = f"{where}: cannot read the parquet footer ({exc})."
+                artifact.error_class = ViewerError
                 self.notice("unreadable", artifact.error)
                 return artifact
             try:
@@ -356,6 +403,7 @@ class _Builder:
             report=report,
             recorded_path=record.path,
             resolution=resolved.how,
+            expected_path=resolved.expected,
         )
         if status is Status.MISSING:
             self.missing.append((record.key, record.path, resolved.inside_root))
@@ -698,6 +746,18 @@ def _open_experiment(
     mbr_table = b.from_path("mbr_transferred", "mbr_transferred", root / "mbr_transferred.parquet")
     if mbr_table is not None:
         extra["mbr_transferred"] = mbr_table
+    mbr_strategy = str(exp.get("mbr", "None"))
+    stale = [
+        name
+        for name in ("mbr_transferred.parquet", "scored_mbr.parquet")
+        if (root / name).is_file()
+    ]
+    if mbr_strategy == "None" and stale:
+        b.notice(
+            "stale_mbr",
+            f"{', '.join(stale)} exist although the manifest records no match-between-runs "
+            "(experiment.mbr = None): they are left over from an earlier run and are not used.",
+        )
     # The searched library: FASTA mode builds it at the root; library mode records inputs.
     for name, input_key in (
         ("fragment_library_precursors", "lib_precursors"),

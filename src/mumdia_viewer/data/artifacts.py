@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
-from .errors import ArtifactNotFound, SchemaVersionError
+from .errors import ArtifactNotFound, LayoutError, SchemaVersionError, ViewerError
 from .manifest import ArtifactRecord
 from .pqio import ParquetHandle
 from .reports import Report
@@ -40,6 +40,11 @@ class Artifact:
     recorded_path: str | None = None
     resolution: str = "found"
     error: str | None = None
+    # The exception class require() raises for ``error``: SchemaVersionError for an
+    # unsupported version, LayoutError for columns that match no layout, ViewerError for
+    # an unreadable file.
+    error_class: type[ViewerError] = SchemaVersionError
+    expected_path: Path | None = None
     _handle: ParquetHandle | None = field(default=None, repr=False)
     _columns_checked: bool = field(default=False, repr=False)
 
@@ -82,9 +87,11 @@ class Artifact:
                 ),
             }.get(self.status, "is absent")
             where = self.recorded_path or self.key
+            if self.expected_path is not None:
+                where = f"{self.expected_path} (recorded as {self.recorded_path})"
             raise ArtifactNotFound(f"{self.key} {state}: {where}")
         if self.error is not None:
-            raise SchemaVersionError(self.error)
+            raise self.error_class(self.error)
         return self.path
 
     def parquet(self) -> ParquetHandle:
@@ -93,6 +100,8 @@ class Artifact:
         if self._handle is None:
             self._handle = ParquetHandle(path)
         if not self._columns_checked:
+            if self.error_class is LayoutError and self.error is not None:
+                raise LayoutError(self.error)
             check_columns(
                 self.kind, self._handle.schema, where=str(path), version=self.version.version
             )

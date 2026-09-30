@@ -47,9 +47,13 @@ class RowGroupCache:
                 self._items[key] = table  # most recently used last
             return table
 
+    def admits(self, nbytes: int) -> bool:
+        """True when a table of ``nbytes`` would be kept (at most a quarter of the budget)."""
+        return nbytes <= self.max_bytes // 4
+
     def put(self, key: tuple, table: pa.Table) -> None:
         size = table.nbytes
-        if size > self.max_bytes // 4:
+        if not self.admits(size):
             return
         with self._lock:
             old = self._items.pop(key, None)
@@ -83,6 +87,8 @@ class ParquetHandle:
         self._stamp: tuple[int, int] | None = None
         self._metadata: pq.FileMetaData | None = None
         self._offsets: np.ndarray | None = None
+        self._schema: pa.Schema | None = None
+        self._leaves: dict[str, int] | None = None
 
     def _current_stamp(self) -> tuple[int, int]:
         st = os.stat(self.path)
@@ -102,11 +108,39 @@ class ParquetHandle:
                 self._metadata = pq.read_metadata(self.path)
                 self._stamp = stamp
                 self._offsets = None
+                self._schema = None
+                self._leaves = None
             return self._metadata
 
     @property
     def schema(self) -> pa.Schema:
-        return self.metadata().schema.to_arrow_schema()
+        """The Arrow schema, converted from the footer once per file version."""
+        md = self.metadata()
+        with self._lock:
+            if self._schema is None:
+                self._schema = md.schema.to_arrow_schema()
+            return self._schema
+
+    def leaf_index(self, column: str) -> int | None:
+        """The parquet leaf index of a flat column (None for absent or nested columns)."""
+        md = self.metadata()
+        with self._lock:
+            if self._leaves is None:
+                schema = md.schema
+                self._leaves = {schema.column(j).path: j for j in range(len(schema))}
+            return self._leaves.get(column)
+
+    def null_counts(self, column: str) -> list[int | None]:
+        """Footer null count of a flat column per row group (None where not recorded)."""
+        md = self.metadata()
+        leaf = self.leaf_index(column)
+        if leaf is None:
+            return [None] * md.num_row_groups
+        out: list[int | None] = []
+        for rg in range(md.num_row_groups):
+            stats = md.row_group(rg).column(leaf).statistics
+            out.append(stats.null_count if stats is not None and stats.has_null_count else None)
+        return out
 
     @property
     def num_rows(self) -> int:
@@ -210,12 +244,7 @@ class ParquetHandle:
         md = self.metadata()
         # Resolve the parquet leaf column by its path: the arrow field index differs
         # from the leaf index once a nested (list) column precedes it.
-        leaf = None
-        schema = md.schema
-        for j in range(len(schema)):
-            if schema.column(j).path == column:
-                leaf = j
-                break
+        leaf = self.leaf_index(column)
         if leaf is None:
             return [None] * md.num_row_groups
         out: list[tuple[Any, Any] | None] = []
@@ -227,6 +256,29 @@ class ParquetHandle:
                 out.append((stats.min, stats.max))
         return out
 
+    def footer_digest(self) -> str:
+        """blake3 over (size, footer bytes): changes when the file's content changes.
+
+        Unlike :meth:`fingerprint` it ignores the modification time, so a copied file
+        keeps its digest.
+        """
+        size = self._current_stamp()[0]
+        h = blake3.blake3()
+        h.update(f"{size}:".encode())
+        h.update(self._footer_bytes(size))
+        return h.hexdigest()
+
+    def _footer_bytes(self, size: int) -> bytes:
+        with open(self.path, "rb") as fh:
+            if size < 12:
+                return fh.read()
+            fh.seek(size - 8)
+            tail = fh.read(8)
+            footer_len = int.from_bytes(tail[:4], "little")
+            start = max(0, size - 8 - footer_len)
+            fh.seek(start)
+            return fh.read(size - start)
+
     def fingerprint(self) -> str:
         """An identity for a file without a recorded content hash.
 
@@ -236,14 +288,7 @@ class ParquetHandle:
         size, mtime = self._current_stamp()
         h = blake3.blake3()
         h.update(f"{size}:{mtime}:".encode())
-        with open(self.path, "rb") as fh:
-            if size >= 12:
-                fh.seek(size - 8)
-                tail = fh.read(8)
-                footer_len = int.from_bytes(tail[:4], "little")
-                start = max(0, size - 8 - footer_len)
-                fh.seek(start)
-                h.update(fh.read(size - start))
+        h.update(self._footer_bytes(size))
         return h.hexdigest()
 
 

@@ -98,6 +98,8 @@ class ResolvedPath:
     path: Path | None
     how: Resolution
     inside_root: bool
+    # Where the file should be in the opened directory (set for missing re-rooted paths).
+    expected: Path | None = None
 
     @property
     def exists(self) -> bool:
@@ -134,7 +136,7 @@ class PathResolver:
             path = self.root.joinpath(*rel)
             if path.exists():
                 return ResolvedPath(recorded, path, "rerooted", True)
-            return ResolvedPath(recorded, None, "missing", True)
+            return ResolvedPath(recorded, None, "missing", True, expected=path)
         for prefix, target, fold in self._remaps:
             tail = _strip(split_parts(recorded), prefix, fold)
             if tail is not None:

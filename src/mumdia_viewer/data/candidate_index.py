@@ -69,8 +69,24 @@ class CandidateIndex:
         """The number of distinct candidates."""
         return int(np.unique(self.ids).size) if not self.contiguous else int(self.ids.size)
 
+    def _key(self, cid: int) -> np.generic | None:
+        """``cid`` as a scalar of the ids' dtype, or None when it cannot be present.
+
+        ``np.searchsorted`` with a Python int promotes and copies the whole ``ids``
+        array on every call (about 1 ms on 683,297 ids); a typed key does not.
+        """
+        value = int(cid)
+        if self.ids.dtype.kind in "iu":
+            info = np.iinfo(self.ids.dtype)
+            if not info.min <= value <= info.max:
+                return None
+        return self.ids.dtype.type(value)
+
     def __contains__(self, cid: int) -> bool:
-        i = int(np.searchsorted(self.ids, cid, side="left"))
+        key = self._key(cid)
+        if key is None:
+            return False
+        i = int(np.searchsorted(self.ids, key, side="left"))
         return i < self.ids.size and int(self.ids[i]) == int(cid)
 
     @property
@@ -79,8 +95,11 @@ class CandidateIndex:
 
     def ranges(self, cid: int) -> list[tuple[int, int]]:
         """Global ``[start, stop)`` row ranges of ``cid`` (one range when contiguous)."""
-        lo = int(np.searchsorted(self.ids, cid, side="left"))
-        hi = int(np.searchsorted(self.ids, cid, side="right"))
+        key = self._key(cid)
+        if key is None:
+            return []
+        lo = int(np.searchsorted(self.ids, key, side="left"))
+        hi = int(np.searchsorted(self.ids, key, side="right"))
         return [(int(self.starts[i]), int(self.stops[i])) for i in range(lo, hi)]
 
     def rows(self, cid: int) -> tuple[int, int] | None:
@@ -164,9 +183,18 @@ class CandidateIndex:
         handle = artifact.parquet()
         name = f"candidate_index_v{INDEX_FORMAT}_{column}"
         identity = artifact.identity()
+        # The recorded hash names the file the engine wrote. A file replaced without a
+        # manifest or report update keeps that hash, so the entry also stores a digest
+        # of the file's size and footer, and a mismatch rebuilds the index.
+        digest = handle.footer_digest()
         if cache is not None:
             hit = cache.load_arrays(identity, name)
-            if hit is not None and int(hit["num_rows"][0]) == handle.num_rows:
+            if (
+                hit is not None
+                and int(hit["num_rows"][0]) == handle.num_rows
+                and "footer" in hit
+                and str(hit["footer"][0]) == digest
+            ):
                 return cls(
                     hit["ids"],
                     hit["starts"],
@@ -185,6 +213,7 @@ class CandidateIndex:
                 stops=index.stops,
                 flags=np.array([index.file_sorted, index.contiguous]),
                 num_rows=np.array([handle.num_rows], dtype=np.int64),
+                footer=np.array([digest]),
             )
         return index
 
