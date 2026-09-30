@@ -1,0 +1,18 @@
+{
+  "logical_name": "isolation_windows",
+  "schema_name": "isolation_windows",
+  "schema_version": 1,
+  "stage": "convert",
+  "rows": 8,
+  "content_hash": "7513bc0fa0bcd11738d67ee7fa54849ab3a35a778562ac8394cebc9a90d42e5f",
+  "params": {
+    "config_hash": "d239d92f1a6733c8706a280f0bd4a9a86be3d0c0841c535beefe56cad559925e",
+    "max_spectra": 0,
+    "mzml": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G4_losers/fixture_ovl.mzML",
+    "top_peaks_ms1": 0,
+    "top_peaks_ms2": 0
+  },
+  "stats": {},
+  "model_identity": null,
+  "elapsed_ms": 10
+}

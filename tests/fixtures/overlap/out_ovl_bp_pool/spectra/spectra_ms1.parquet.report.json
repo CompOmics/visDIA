@@ -1,0 +1,18 @@
+{
+  "logical_name": "spectra_ms1",
+  "schema_name": "spectra_ms1",
+  "schema_version": 1,
+  "stage": "convert",
+  "rows": 60,
+  "content_hash": "830a43efaf3e6a566aa7405d236b13df327112ac6830edc9232d4d22f3bba0f5",
+  "params": {
+    "config_hash": "a26a92fb79198b24146ad00e2c5bc96b2e3af195f982a0df00ede2586fd4d24c",
+    "max_spectra": 0,
+    "mzml": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G4_losers/fixture_ovl.mzML",
+    "top_peaks_ms1": 0,
+    "top_peaks_ms2": 0
+  },
+  "stats": {},
+  "model_identity": null,
+  "elapsed_ms": 9
+}

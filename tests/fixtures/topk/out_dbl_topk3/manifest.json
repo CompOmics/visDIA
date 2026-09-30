@@ -1,0 +1,239 @@
+{
+  "mumdia_version": "0.5.0",
+  "git_sha": "80d4874318cb",
+  "commit_date": "2026-09-29T12:37:28+02:00",
+  "cli_args": [
+    "C:\\Program Files\\MuMDIA\\binaries\\mumdia.exe",
+    "run",
+    "--fasta",
+    "C:/Users/robbi/mumdia_viewer_ref/v050/test_data/fixture.fasta",
+    "--mzml",
+    "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/fixture_dbl.mzML",
+    "--out-dir",
+    "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3",
+    "--config",
+    "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/dbl_topk3.json",
+    "--threads",
+    "2"
+  ],
+  "config_json": "{\"convert\":{\"thermo_raw_parser\":\"auto\",\"msconvert\":\"auto\",\"msconvert_args\":[],\"reuse_converted\":true,\"parallel_conversions\":4},\"prescan\":{\"tol_da\":0.005,\"rt_slack_s\":150.0,\"rt_bin_s\":25.0,\"top_peaks\":150,\"mods\":[\"C:Carbamidomethyl\",\"M:Oxidation\"],\"anchor_mods\":[],\"anchor_all\":false},\"rng_seed\":0,\"digest\":{\"enzyme\":\"trypsin_p\",\"missed_cleavages\":2,\"min_len\":5,\"max_len\":50,\"decoy\":{\"strategy\":\"reverse\"},\"n_term_met_excision\":true},\"peptidoforms\":{\"fixed_mods\":[{\"residue\":\"C\",\"name\":\"Carbamidomethyl\"}],\"variable_mods\":[{\"residue\":\"M\",\"name\":\"Oxidation\"}],\"max_variable_mods\":1,\"charge_min\":2,\"charge_max\":3,\"charge_by_basic_residues\":false,\"unknown_modification\":\"error\"},\"predict_frag\":{\"predictor\":\"native\",\"rt_predictor\":\"native\",\"charge2_from_precursor_charge\":2,\"charge_by_basic_residues\":false,\"top_n_fragments\":6,\"ms2pip_model\":\"HCDch2\",\"ms2pip_python\":null,\"peptdeep_model\":\"generic\",\"peptdeep_nce\":30.0,\"peptdeep_instrument\":\"Lumos\",\"peptdeep_python\":null,\"deeplc_python\":null,\"sidecar_script_dir\":\"C:\\\\Program Files\\\\MuMDIA\\\\binaries\\\\scripts\",\"defer_deeplc_to_multihead\":true,\"library_cache\":\"auto\"},\"search_seed\":{\"fdr_seed\":0.01,\"fragment_tol_ppm\":20.0,\"report_psms\":5,\"min_matched_peaks\":4,\"top_n_peaks\":300,\"matcher\":\"fragindex\",\"two_pass_mass_cal\":false,\"mass_cal_loess\":false},\"rt_im_train\":{\"calibration_method\":\"loess\",\"q_train\":0.01,\"p_rt\":0.95,\"rt_window_multiplier\":2.0,\"min_seed_for_calibration\":50,\"loess_span\":0.3,\"fallback_rt_window_s\":120.0,\"finetune_deeplc\":false,\"multihead_calibration\":null,\"finetune_epochs\":25,\"finetune_patience\":10,\"finetune_batch\":0,\"adaptive_rt_window\":false,\"adaptive_rt_bins\":12,\"rt_window_min_s\":1.0,\"window_holdout_frac\":0.0,\"library_irt\":\"auto\",\"deeplc_predict_shards\":0,\"deeplc_projection_cache\":\"auto\"},\"extract\":{\"windows_in_flight\":null,\"fixed_scan_window\":3,\"frag_tol_ppm\":20.0,\"prec_tol_ppm\":20.0,\"presence_min_matched\":3,\"presence_min_fragments\":3,\"presence_min_coelution\":2,\"gate_min_score\":0.2,\"min_matched_fraction\":0.0,\"apex_top_fragments\":0,\"apex_rt_prior_s\":120.0,\"apex_count_tol\":1,\"apex_count_window\":5,\"apex_gaussian_sigma_scans\":0.0,\"emit_window_grid\":true,\"chromatogram_schema\":2,\"bucket_size\":8192,\"peak_claim\":\"none\",\"claim_cues\":{\"mz_close\":false,\"mz_close_sigma_ppm\":5.0,\"rt_prior\":false,\"rt_prior_tau_s\":30.0,\"ms1_support\":false,\"reassign\":false,\"apportion_em_iters\":0},\"emit_demix_features\":false,\"demix_lambda\":1.0,\"demix_max_candidates\":64,\"demix_scan_stride\":1,\"emit_contested_features\":false,\"peak_claim_margin\":2.0,\"matcher\":\"fragindex\",\"min_coelution_run\":0,\"ms1_rescue\":false,\"retain_top_peaks\":3,\"promote_top_peaks\":3,\"alt_peak_min_area_frac\":0.1,\"alt_peak_min_separation_s\":5.0,\"emit_candidate_audit\":false,\"apex_evidence_rank\":true,\"emit_gate_diagnostics\":false,\"gate_mode\":\"apex_pearson\",\"gate_coelution_min\":0.5},\"features\":{\"set\":\"extended\",\"emit_pin\":false,\"coelution_corr_threshold\":0.9,\"prec_tol_ppm\":20.0,\"bound_features\":true,\"bound_peak_fraction\":0.3333333333333333,\"bound_peak_grace\":0,\"bound_from_confident\":true,\"bound_confident_pct\":50.0,\"ms1_precursor_features\":false,\"chrom_loaders\":3},\"compete\":{\"group_by\":\"peptidoform_charge\",\"apex_rt_tolerance_s\":5.0,\"mode\":\"winner_take_all\",\"margin\":0.0,\"unique_evidence_min_fragments\":2,\"emit_competition_audit\":false},\"rescore\":{\"classifier\":\"native_tda\",\"folds\":3,\"train_fdr\":0.01,\"num_iter\":10,\"max_feature_matrix_gib\":0.0,\"python\":null,\"percolator_bin\":null,\"entrapment_marker\":null,\"entrapment_exclude\":null,\"entrapment_contaminant_markers\":[],\"entrapment_ratio\":1.0,\"strict\":true,\"handoff\":\"raw\",\"features\":null,\"features_file\":null,\"feature_preset\":\"all\",\"train_neg_ratio\":2.0,\"train_neg_select\":\"hybrid\",\"train_subsample\":0.0,\"train_warm_epochs\":5,\"train_margin_frac\":0.5,\"seeds\":1},\"quant\":{\"q_threshold\":0.01,\"top_n_fragments\":3,\"top_n_peptides\":3,\"rollup\":\"top_n_sum\",\"bound_peak\":true,\"peak_fraction\":0.16666666666666666,\"peak_grace\":1,\"peak_window_mode\":\"per_candidate\",\"reliable_q\":0.001,\"q_filter\":\"peptide_q\",\"interference_envelope\":false,\"fragment_selection\":\"observed_area\",\"fixed_scan_halfwidth\":0,\"baseline_subtract\":false,\"baseline_flank_scans\":12,\"baseline_quantile\":0.25,\"fixed_window_s\":0.0},\"mbr\":{\"strategy\":\"none\",\"q_anchor\":0.01,\"min_anchor_runs\":2,\"q_transfer\":0.01,\"rt_window_s\":20.0,\"decoy_transfer\":\"permuted_rt\",\"consensus_corr_min\":0.0,\"requant_all\":false,\"python\":null},\"experiment\":{\"parallel_runs\":0,\"rt_library_scope\":\"first_run_only\",\"overlap_front_threads\":null},\"groups\":{\"window_groups\":1,\"calibration\":\"global\",\"parallel\":1,\"rt_adaptation\":\"once_per_run\",\"balance\":\"precursors\",\"delete_band_intermediates\":true,\"pool_competed\":false,\"pool_chromatograms\":false}}",
+  "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc",
+  "model_identities": {
+    "feature_schema_id": "e5b4eff0133e411dbf406947c89466619ec557ab37874bc3948792d9890afe8e",
+    "fragment_predictor": "Native",
+    "rescorer": "native-percolator-lite-v1",
+    "rt_predictor": "Native"
+  },
+  "inputs": {
+    "fasta": {
+      "path": "C:/Users/robbi/mumdia_viewer_ref/v050/test_data/fixture.fasta",
+      "bytes": 2723,
+      "content_hash": "6270c25f2dac0e224f63de65df37ea604cb0419c7f229e6a822551e24ba33a38"
+    },
+    "mzml": {
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/fixture_dbl.mzML",
+      "bytes": 1540555,
+      "content_hash": "156ef4fc4792b6e87f3c5ce6aee0181355759a7ddfb29e2706ec25a7b5430882"
+    }
+  },
+  "artifacts": {
+    "chromatograms": {
+      "logical_name": "chromatograms",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/chromatograms.parquet",
+      "format": "parquet",
+      "schema_name": "chromatograms",
+      "schema_version": 2,
+      "rows": 2592,
+      "content_hash": "8f3d248cb2efff589e0b3c07d65de83ae940eeed05da9d51edb9d5dea568892d",
+      "producing_stage": "extract",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "features": {
+      "logical_name": "features",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/features.parquet",
+      "format": "parquet",
+      "schema_name": "features",
+      "schema_version": 2,
+      "rows": 360,
+      "content_hash": "f756f3d3163885be25b674f3c17b9f66f8e2f286939fe5706c4fdfbebb113a85",
+      "producing_stage": "features",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "fragment_library_fragments": {
+      "logical_name": "fragment_library_fragments",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/fragment_library_fragments.parquet",
+      "format": "parquet",
+      "schema_name": "fragment_library_fragments",
+      "schema_version": 1,
+      "rows": 22920,
+      "content_hash": "b38834f409e8d1d763cb70abf749eb6b4fdb9055806814ecd318b201f36e1e14",
+      "producing_stage": "predict-frag",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "fragment_library_precursors": {
+      "logical_name": "fragment_library_precursors",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/fragment_library_precursors.parquet",
+      "format": "parquet",
+      "schema_name": "fragment_library_precursors",
+      "schema_version": 1,
+      "rows": 3820,
+      "content_hash": "4ca6837fe7a5708d67b1c5851596728fefbccbde02270e98252964be2f12ffa7",
+      "producing_stage": "predict-frag",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "fragment_quant": {
+      "logical_name": "fragment_quant",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/fragment_quant.parquet",
+      "format": "parquet",
+      "schema_name": "fragment_quant",
+      "schema_version": 1,
+      "rows": 893,
+      "content_hash": "888a91c648893b65f892c41f7d1dd077afb95c6441a31261e5191febb64d4b40",
+      "producing_stage": "quant",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "isolation_windows": {
+      "logical_name": "isolation_windows",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/spectra/isolation_windows.parquet",
+      "format": "parquet",
+      "schema_name": "isolation_windows",
+      "schema_version": 1,
+      "rows": 8,
+      "content_hash": "c0dd8ab3be430ed6fd3b0dc26ee41b7e897dc125fbdf5a7d8a66b17552588412",
+      "producing_stage": "convert",
+      "config_hash": "ce8833f21783c5a57e1fbd1a080e05022ecbd47d92eed2168cddb6f031f5b368"
+    },
+    "ms2_to_ms1": {
+      "logical_name": "ms2_to_ms1",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/spectra/ms2_to_ms1.parquet",
+      "format": "parquet",
+      "schema_name": "ms2_to_ms1",
+      "schema_version": 1,
+      "rows": 480,
+      "content_hash": "7d76d28bf50852ac6a58a81ad7077bfe3eddb22ae5c4acc397b2c7e46d701012",
+      "producing_stage": "convert",
+      "config_hash": "ce8833f21783c5a57e1fbd1a080e05022ecbd47d92eed2168cddb6f031f5b368"
+    },
+    "peptide_quant": {
+      "logical_name": "peptide_quant",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/peptide_quant.parquet",
+      "format": "parquet",
+      "schema_name": "peptide_quant",
+      "schema_version": 2,
+      "rows": 151,
+      "content_hash": "c03c58f54f0346e4800cd609960cb860fccbd3f6fbef411671cfaaf332df1c4f",
+      "producing_stage": "quant",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "peptides": {
+      "logical_name": "peptides",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/peptides.parquet",
+      "format": "parquet",
+      "schema_name": "peptides",
+      "schema_version": 1,
+      "rows": 876,
+      "content_hash": "69f5ecd393cb3e62bfcf6cd7e2dc18f8550e8582ea8cf9bc846f48d83b80f22c",
+      "producing_stage": "digest",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "peptidoforms": {
+      "logical_name": "peptidoforms",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/peptidoforms.parquet",
+      "format": "parquet",
+      "schema_name": "peptidoforms",
+      "schema_version": 1,
+      "rows": 3820,
+      "content_hash": "1d2dd3a1bd82f3e148227a8ea7824f63e259a05b69f6d3fcc60fa23503de825b",
+      "producing_stage": "peptidoforms",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "protein_group_quant": {
+      "logical_name": "protein_group_quant",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/protein_group_quant.parquet",
+      "format": "parquet",
+      "schema_name": "protein_group_quant",
+      "schema_version": 2,
+      "rows": 16,
+      "content_hash": "0d387f6894cf9128d00b201e224b7cdecf82b5fc75f9e8d14d2c455f95ed5f8a",
+      "producing_stage": "quant",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "psms_competed": {
+      "logical_name": "psms_competed",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/psms_competed.parquet",
+      "format": "parquet",
+      "schema_name": "psms_competed",
+      "schema_version": 4,
+      "rows": 360,
+      "content_hash": "f756f3d3163885be25b674f3c17b9f66f8e2f286939fe5706c4fdfbebb113a85",
+      "producing_stage": "compete",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "psms_extracted": {
+      "logical_name": "psms_extracted",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/psms_extracted.parquet",
+      "format": "parquet",
+      "schema_name": "psms_extracted",
+      "schema_version": 2,
+      "rows": 360,
+      "content_hash": "a9fc19f255ec2e256a5a34e6716b1e0c9b3ab10d7b6c7e182f47f6077915190e",
+      "producing_stage": "extract",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "psms_scored": {
+      "logical_name": "psms_scored",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/psms_scored.parquet",
+      "format": "parquet",
+      "schema_name": "psms_scored",
+      "schema_version": 4,
+      "rows": 288,
+      "content_hash": "c5b6d37eac1dd3d09e800c6d6180bf8d880020f40de99a5b7129720a68edf9b5",
+      "producing_stage": "rescore",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "run_windows": {
+      "logical_name": "run_windows",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/run_windows.parquet",
+      "format": "parquet",
+      "schema_name": "run_windows",
+      "schema_version": 1,
+      "rows": 3820,
+      "content_hash": "c6f1da79162150dbb80f87fc56ce55fb47215f597948e8a946b8bef273629379",
+      "producing_stage": "rt-im-train",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "seed_psms": {
+      "logical_name": "seed_psms",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/seed_psms.parquet",
+      "format": "parquet",
+      "schema_name": "seed_psms",
+      "schema_version": 1,
+      "rows": 222,
+      "content_hash": "afca93678849839117f6a839266fb8cdbba96aeae536301caa5f29f68a32c73f",
+      "producing_stage": "search-seed",
+      "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc"
+    },
+    "spectra_ms1": {
+      "logical_name": "spectra_ms1",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/spectra/spectra_ms1.parquet",
+      "format": "parquet",
+      "schema_name": "spectra_ms1",
+      "schema_version": 1,
+      "rows": 60,
+      "content_hash": "1e554c7c3544e3ff82d5fc9e454283385dc15e0a650936eb2fc64df05fb76a78",
+      "producing_stage": "convert",
+      "config_hash": "ce8833f21783c5a57e1fbd1a080e05022ecbd47d92eed2168cddb6f031f5b368"
+    },
+    "spectra_ms2": {
+      "logical_name": "spectra_ms2",
+      "path": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/spectra/spectra_ms2.parquet",
+      "format": "parquet",
+      "schema_name": "spectra_ms2",
+      "schema_version": 1,
+      "rows": 480,
+      "content_hash": "520f3578a5ebc6d2b50b2719eb302eb88b02688d02238506d8dab04e28196d35",
+      "producing_stage": "convert",
+      "config_hash": "ce8833f21783c5a57e1fbd1a080e05022ecbd47d92eed2168cddb6f031f5b368"
+    }
+  }
+}

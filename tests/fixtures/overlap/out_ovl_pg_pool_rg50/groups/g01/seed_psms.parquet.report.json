@@ -1,0 +1,24 @@
+{
+  "logical_name": "seed_psms",
+  "schema_name": "seed_psms",
+  "schema_version": 1,
+  "stage": "search-seed",
+  "rows": 76,
+  "content_hash": "eea4721f936c63fd90b10f361e58a1c2400a287b3b8bcb0bedcf5a4fcf5ef091",
+  "params": {
+    "fdr_seed": 0.01,
+    "fragment_tol_ppm": 20.0,
+    "min_matched_peaks": 4,
+    "report_psms": 5,
+    "top_n_peaks": 300
+  },
+  "stats": {
+    "calibrant_bytes": 7216,
+    "calibrant_deviations": 451,
+    "calibrant_target_rows": 76,
+    "psms": 76,
+    "targets_at_q0.01": 0
+  },
+  "model_identity": "native-seed-hyperscore-v1",
+  "elapsed_ms": 4
+}

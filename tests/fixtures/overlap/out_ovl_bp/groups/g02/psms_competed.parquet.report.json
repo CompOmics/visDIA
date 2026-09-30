@@ -1,0 +1,20 @@
+{
+  "logical_name": "psms_competed",
+  "schema_name": "psms_competed",
+  "schema_version": 4,
+  "stage": "compete",
+  "rows": 22,
+  "content_hash": "113c7215ca20f32b2b193c06b1603925de4b0fa022cfc08b39eecc7e422241fc",
+  "params": {
+    "group_by": "BasePeptide",
+    "mode": "WinnerTakeAll"
+  },
+  "stats": {
+    "input_rows": 50,
+    "kept": 22,
+    "publish": "rewritten",
+    "removed": 28
+  },
+  "model_identity": null,
+  "elapsed_ms": 29
+}

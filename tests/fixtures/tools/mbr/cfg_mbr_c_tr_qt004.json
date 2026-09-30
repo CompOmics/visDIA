@@ -1,0 +1,24 @@
+{
+  "features": {
+    "set": "extended"
+  },
+  "extract": {
+    "apex_count_window": 5,
+    "apex_rt_prior_s": 120.0,
+    "gate_min_score": 0.2
+  },
+  "experiment": {
+    "parallel_runs": 1,
+    "overlap_front_threads": 0
+  },
+  "mbr": {
+    "strategy": "rt_transfer",
+    "python": "C:/Users/robbi/AppData/Local/MuMDIA/python/Scripts/python.exe",
+    "min_anchor_runs": 1,
+    "q_anchor": 0.0045,
+    "q_transfer": 0.15
+  },
+  "quant": {
+    "q_threshold": 0.004
+  }
+}

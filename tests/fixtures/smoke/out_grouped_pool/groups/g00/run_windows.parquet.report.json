@@ -1,0 +1,21 @@
+{
+  "logical_name": "run_windows",
+  "schema_name": "run_windows",
+  "schema_version": 1,
+  "stage": "rt-im-train",
+  "rows": 1770,
+  "content_hash": "344f7334b85c152e4dec982e8ff5aead92e96ce8a9412e3d2c75e73c9e37b039",
+  "params": {
+    "method": "Loess",
+    "p_rt": 0.95,
+    "q_train": 0.01
+  },
+  "stats": {
+    "calibration_status": "insufficient_anchors_unbounded",
+    "candidates_without_finite_irt": 0,
+    "n_train": 0,
+    "w_rt": null
+  },
+  "model_identity": null,
+  "elapsed_ms": 1
+}

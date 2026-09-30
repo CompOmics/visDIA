@@ -1,0 +1,40 @@
+{
+  "logical_name": "fragment_quant",
+  "schema_name": "fragment_quant",
+  "schema_version": 1,
+  "stage": "quant",
+  "rows": 893,
+  "content_hash": "888a91c648893b65f892c41f7d1dd077afb95c6441a31261e5191febb64d4b40",
+  "params": {
+    "apex_rt_column_present": true,
+    "baseline_flank_scans": 12,
+    "baseline_quantile": 0.25,
+    "baseline_subtract": false,
+    "bound_peak": true,
+    "candidates_with_scored_apex": 288,
+    "chromatograms": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/chromatograms.parquet",
+    "config_hash": "2360868da8dcc794abbd5056d8fce22137d05aa51cd034bac1ee67b5404b72bc",
+    "fixed_scan_halfwidth": 0,
+    "fixed_window_s": 0.0,
+    "fragment_selection": "ObservedArea",
+    "peak_fraction": 0.16666666666666666,
+    "peak_grace": 1,
+    "peak_window_mode": "PerCandidate",
+    "psms_scored": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G1_topk/out_dbl_topk3/psms_scored.parquet",
+    "q_filter": "PeptideQ",
+    "q_threshold": 0.01,
+    "reliable_q": 0.001,
+    "rollup": "TopNSum",
+    "top_n_fragments": 3,
+    "top_n_peptides": 3
+  },
+  "stats": {
+    "nonquantifiable_peptides": 0,
+    "peptide_rows": 151,
+    "protein_group_rows": 16,
+    "quantified_peptides": 151,
+    "quantified_protein_groups": 16
+  },
+  "model_identity": null,
+  "elapsed_ms": 10
+}

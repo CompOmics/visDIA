@@ -1,0 +1,18 @@
+{
+  "logical_name": "isolation_windows",
+  "schema_name": "isolation_windows",
+  "schema_version": 1,
+  "stage": "convert",
+  "rows": 8,
+  "content_hash": "c0dd8ab3be430ed6fd3b0dc26ee41b7e897dc125fbdf5a7d8a66b17552588412",
+  "params": {
+    "config_hash": "5321a7358f74fc57ced3431bad83b69bb0b6e63105ea14b06db9a94fdb84848f",
+    "max_spectra": 0,
+    "mzml": "C:/Users/robbi/mumdia_viewer_ref/smoke/fixture.mzML",
+    "top_peaks_ms1": 0,
+    "top_peaks_ms2": 0
+  },
+  "stats": {},
+  "model_identity": null,
+  "elapsed_ms": 9
+}

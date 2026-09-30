@@ -1,0 +1,239 @@
+{
+  "mumdia_version": "0.5.0",
+  "git_sha": "80d4874318cb",
+  "commit_date": "2026-09-29T12:37:28+02:00",
+  "cli_args": [
+    "C:\\Program Files\\MuMDIA\\binaries\\mumdia.exe",
+    "run",
+    "--fasta",
+    "test_data/fixture.fasta",
+    "--mzml",
+    "C:/Users/robbi/mumdia_viewer_ref/smoke/fixture.mzML",
+    "--out-dir",
+    "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1",
+    "--config",
+    "C:/Users/robbi/mumdia_viewer_ref/smoke/chrom_v1.json",
+    "--threads",
+    "2"
+  ],
+  "config_json": "{\"convert\":{\"thermo_raw_parser\":\"auto\",\"msconvert\":\"auto\",\"msconvert_args\":[],\"reuse_converted\":true,\"parallel_conversions\":4},\"prescan\":{\"tol_da\":0.005,\"rt_slack_s\":150.0,\"rt_bin_s\":25.0,\"top_peaks\":150,\"mods\":[\"C:Carbamidomethyl\",\"M:Oxidation\"],\"anchor_mods\":[],\"anchor_all\":false},\"rng_seed\":0,\"digest\":{\"enzyme\":\"trypsin_p\",\"missed_cleavages\":2,\"min_len\":5,\"max_len\":50,\"decoy\":{\"strategy\":\"reverse\"},\"n_term_met_excision\":true},\"peptidoforms\":{\"fixed_mods\":[{\"residue\":\"C\",\"name\":\"Carbamidomethyl\"}],\"variable_mods\":[{\"residue\":\"M\",\"name\":\"Oxidation\"}],\"max_variable_mods\":1,\"charge_min\":2,\"charge_max\":3,\"charge_by_basic_residues\":false,\"unknown_modification\":\"error\"},\"predict_frag\":{\"predictor\":\"native\",\"rt_predictor\":\"native\",\"charge2_from_precursor_charge\":2,\"charge_by_basic_residues\":false,\"top_n_fragments\":6,\"ms2pip_model\":\"HCDch2\",\"ms2pip_python\":null,\"peptdeep_model\":\"generic\",\"peptdeep_nce\":30.0,\"peptdeep_instrument\":\"Lumos\",\"peptdeep_python\":null,\"deeplc_python\":null,\"sidecar_script_dir\":\"C:\\\\Program Files\\\\MuMDIA\\\\binaries\\\\scripts\",\"defer_deeplc_to_multihead\":true,\"library_cache\":\"auto\"},\"search_seed\":{\"fdr_seed\":0.01,\"fragment_tol_ppm\":20.0,\"report_psms\":5,\"min_matched_peaks\":4,\"top_n_peaks\":300,\"matcher\":\"fragindex\",\"two_pass_mass_cal\":false,\"mass_cal_loess\":false},\"rt_im_train\":{\"calibration_method\":\"loess\",\"q_train\":0.01,\"p_rt\":0.95,\"rt_window_multiplier\":1.0,\"min_seed_for_calibration\":50,\"loess_span\":0.3,\"fallback_rt_window_s\":120.0,\"finetune_deeplc\":false,\"multihead_calibration\":null,\"finetune_epochs\":25,\"finetune_patience\":10,\"finetune_batch\":0,\"adaptive_rt_window\":false,\"adaptive_rt_bins\":12,\"rt_window_min_s\":1.0,\"window_holdout_frac\":0.0,\"library_irt\":\"auto\",\"deeplc_predict_shards\":0,\"deeplc_projection_cache\":\"auto\"},\"extract\":{\"windows_in_flight\":null,\"fixed_scan_window\":3,\"frag_tol_ppm\":20.0,\"prec_tol_ppm\":20.0,\"presence_min_matched\":3,\"presence_min_fragments\":3,\"presence_min_coelution\":2,\"gate_min_score\":0.2,\"min_matched_fraction\":0.0,\"apex_top_fragments\":0,\"apex_rt_prior_s\":120.0,\"apex_count_tol\":1,\"apex_count_window\":5,\"apex_gaussian_sigma_scans\":0.0,\"emit_window_grid\":true,\"chromatogram_schema\":1,\"bucket_size\":8192,\"peak_claim\":\"none\",\"claim_cues\":{\"mz_close\":false,\"mz_close_sigma_ppm\":5.0,\"rt_prior\":false,\"rt_prior_tau_s\":30.0,\"ms1_support\":false,\"reassign\":false,\"apportion_em_iters\":0},\"emit_demix_features\":false,\"demix_lambda\":1.0,\"demix_max_candidates\":64,\"demix_scan_stride\":1,\"emit_contested_features\":false,\"peak_claim_margin\":2.0,\"matcher\":\"fragindex\",\"min_coelution_run\":0,\"ms1_rescue\":false,\"retain_top_peaks\":1,\"promote_top_peaks\":1,\"alt_peak_min_area_frac\":0.1,\"alt_peak_min_separation_s\":5.0,\"emit_candidate_audit\":false,\"apex_evidence_rank\":true,\"emit_gate_diagnostics\":false,\"gate_mode\":\"apex_pearson\",\"gate_coelution_min\":0.5},\"features\":{\"set\":\"extended\",\"emit_pin\":false,\"coelution_corr_threshold\":0.9,\"prec_tol_ppm\":20.0,\"bound_features\":true,\"bound_peak_fraction\":0.3333333333333333,\"bound_peak_grace\":0,\"bound_from_confident\":true,\"bound_confident_pct\":50.0,\"ms1_precursor_features\":false,\"chrom_loaders\":3},\"compete\":{\"group_by\":\"peptidoform_charge\",\"apex_rt_tolerance_s\":5.0,\"mode\":\"winner_take_all\",\"margin\":0.0,\"unique_evidence_min_fragments\":2,\"emit_competition_audit\":false},\"rescore\":{\"classifier\":\"native_tda\",\"folds\":3,\"train_fdr\":0.01,\"num_iter\":10,\"max_feature_matrix_gib\":0.0,\"python\":null,\"percolator_bin\":null,\"entrapment_marker\":null,\"entrapment_exclude\":null,\"entrapment_contaminant_markers\":[],\"entrapment_ratio\":1.0,\"strict\":true,\"handoff\":\"raw\",\"features\":null,\"features_file\":null,\"feature_preset\":\"all\",\"train_neg_ratio\":2.0,\"train_neg_select\":\"hybrid\",\"train_subsample\":0.0,\"train_warm_epochs\":5,\"train_margin_frac\":0.5,\"seeds\":1},\"quant\":{\"q_threshold\":0.01,\"top_n_fragments\":3,\"top_n_peptides\":3,\"rollup\":\"top_n_sum\",\"bound_peak\":true,\"peak_fraction\":0.16666666666666666,\"peak_grace\":1,\"peak_window_mode\":\"per_candidate\",\"reliable_q\":0.001,\"q_filter\":\"peptide_q\",\"interference_envelope\":false,\"fragment_selection\":\"observed_area\",\"fixed_scan_halfwidth\":0,\"baseline_subtract\":false,\"baseline_flank_scans\":12,\"baseline_quantile\":0.25,\"fixed_window_s\":0.0},\"mbr\":{\"strategy\":\"none\",\"q_anchor\":0.01,\"min_anchor_runs\":2,\"q_transfer\":0.01,\"rt_window_s\":20.0,\"decoy_transfer\":\"permuted_rt\",\"consensus_corr_min\":0.0,\"requant_all\":false,\"python\":null},\"experiment\":{\"parallel_runs\":0,\"rt_library_scope\":\"first_run_only\",\"overlap_front_threads\":null},\"groups\":{\"window_groups\":1,\"calibration\":\"global\",\"parallel\":1,\"rt_adaptation\":\"once_per_run\",\"balance\":\"precursors\",\"delete_band_intermediates\":true,\"pool_competed\":false,\"pool_chromatograms\":false}}",
+  "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9",
+  "model_identities": {
+    "feature_schema_id": "e5b4eff0133e411dbf406947c89466619ec557ab37874bc3948792d9890afe8e",
+    "fragment_predictor": "Native",
+    "rescorer": "native-percolator-lite-v1",
+    "rt_predictor": "Native"
+  },
+  "inputs": {
+    "fasta": {
+      "path": "test_data/fixture.fasta",
+      "bytes": 2723,
+      "content_hash": "6270c25f2dac0e224f63de65df37ea604cb0419c7f229e6a822551e24ba33a38"
+    },
+    "mzml": {
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/fixture.mzML",
+      "bytes": 1761106,
+      "content_hash": "f5187d0c1d35be705377d9db90ce0fae5d22ae062c02d42cd1a63dd291907cf9"
+    }
+  },
+  "artifacts": {
+    "chromatograms": {
+      "logical_name": "chromatograms",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/chromatograms.parquet",
+      "format": "parquet",
+      "schema_name": "chromatograms",
+      "schema_version": 1,
+      "rows": 2556,
+      "content_hash": "f859ebbf9b2734de8f518964acab862b0fe6601d5c83d3a581d3895bbf9aca94",
+      "producing_stage": "extract",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "features": {
+      "logical_name": "features",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/features.parquet",
+      "format": "parquet",
+      "schema_name": "features",
+      "schema_version": 2,
+      "rows": 284,
+      "content_hash": "4ff5110455ca16fe0c70a2fd10f187cd28ea2c94747dd746fe083b75135a5131",
+      "producing_stage": "features",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "fragment_library_fragments": {
+      "logical_name": "fragment_library_fragments",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/fragment_library_fragments.parquet",
+      "format": "parquet",
+      "schema_name": "fragment_library_fragments",
+      "schema_version": 1,
+      "rows": 22920,
+      "content_hash": "b38834f409e8d1d763cb70abf749eb6b4fdb9055806814ecd318b201f36e1e14",
+      "producing_stage": "predict-frag",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "fragment_library_precursors": {
+      "logical_name": "fragment_library_precursors",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/fragment_library_precursors.parquet",
+      "format": "parquet",
+      "schema_name": "fragment_library_precursors",
+      "schema_version": 1,
+      "rows": 3820,
+      "content_hash": "4ca6837fe7a5708d67b1c5851596728fefbccbde02270e98252964be2f12ffa7",
+      "producing_stage": "predict-frag",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "fragment_quant": {
+      "logical_name": "fragment_quant",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/fragment_quant.parquet",
+      "format": "parquet",
+      "schema_name": "fragment_quant",
+      "schema_version": 1,
+      "rows": 889,
+      "content_hash": "cc6e8f24396dc1707f8fc2d18a1bdf8014e6eb2c7145b0f82ec3334232dc9095",
+      "producing_stage": "quant",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "isolation_windows": {
+      "logical_name": "isolation_windows",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/spectra/isolation_windows.parquet",
+      "format": "parquet",
+      "schema_name": "isolation_windows",
+      "schema_version": 1,
+      "rows": 8,
+      "content_hash": "c0dd8ab3be430ed6fd3b0dc26ee41b7e897dc125fbdf5a7d8a66b17552588412",
+      "producing_stage": "convert",
+      "config_hash": "49530e8960152a9a7fa6058b4342b6cdc6cfe95dc115622efa8a870f65274ae6"
+    },
+    "ms2_to_ms1": {
+      "logical_name": "ms2_to_ms1",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/spectra/ms2_to_ms1.parquet",
+      "format": "parquet",
+      "schema_name": "ms2_to_ms1",
+      "schema_version": 1,
+      "rows": 480,
+      "content_hash": "7d76d28bf50852ac6a58a81ad7077bfe3eddb22ae5c4acc397b2c7e46d701012",
+      "producing_stage": "convert",
+      "config_hash": "49530e8960152a9a7fa6058b4342b6cdc6cfe95dc115622efa8a870f65274ae6"
+    },
+    "peptide_quant": {
+      "logical_name": "peptide_quant",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/peptide_quant.parquet",
+      "format": "parquet",
+      "schema_name": "peptide_quant",
+      "schema_version": 2,
+      "rows": 150,
+      "content_hash": "7169002c0acab750258178e283911d3be988a9a40a67c0b10ca14567c5b29641",
+      "producing_stage": "quant",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "peptides": {
+      "logical_name": "peptides",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/peptides.parquet",
+      "format": "parquet",
+      "schema_name": "peptides",
+      "schema_version": 1,
+      "rows": 876,
+      "content_hash": "69f5ecd393cb3e62bfcf6cd7e2dc18f8550e8582ea8cf9bc846f48d83b80f22c",
+      "producing_stage": "digest",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "peptidoforms": {
+      "logical_name": "peptidoforms",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/peptidoforms.parquet",
+      "format": "parquet",
+      "schema_name": "peptidoforms",
+      "schema_version": 1,
+      "rows": 3820,
+      "content_hash": "1d2dd3a1bd82f3e148227a8ea7824f63e259a05b69f6d3fcc60fa23503de825b",
+      "producing_stage": "peptidoforms",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "protein_group_quant": {
+      "logical_name": "protein_group_quant",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/protein_group_quant.parquet",
+      "format": "parquet",
+      "schema_name": "protein_group_quant",
+      "schema_version": 2,
+      "rows": 16,
+      "content_hash": "d3e85d175c956a85d5be439686e205642304ed68a446306379e867d3fc8727fc",
+      "producing_stage": "quant",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "psms_competed": {
+      "logical_name": "psms_competed",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/psms_competed.parquet",
+      "format": "parquet",
+      "schema_name": "psms_competed",
+      "schema_version": 4,
+      "rows": 284,
+      "content_hash": "4ff5110455ca16fe0c70a2fd10f187cd28ea2c94747dd746fe083b75135a5131",
+      "producing_stage": "compete",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "psms_extracted": {
+      "logical_name": "psms_extracted",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/psms_extracted.parquet",
+      "format": "parquet",
+      "schema_name": "psms_extracted",
+      "schema_version": 2,
+      "rows": 284,
+      "content_hash": "4eddf5c59feba13355ceb974f0c54fe8b435b58e0df4cacfd336743a10bec63f",
+      "producing_stage": "extract",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "psms_scored": {
+      "logical_name": "psms_scored",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/psms_scored.parquet",
+      "format": "parquet",
+      "schema_name": "psms_scored",
+      "schema_version": 4,
+      "rows": 284,
+      "content_hash": "a8ed8300f976ae82713c3fcd84490f6bf8aa1725ab3d526691913bf75aa0d9f1",
+      "producing_stage": "rescore",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "run_windows": {
+      "logical_name": "run_windows",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/run_windows.parquet",
+      "format": "parquet",
+      "schema_name": "run_windows",
+      "schema_version": 1,
+      "rows": 3820,
+      "content_hash": "be22797bd3fb9fe2c17d342e09fd3ac2ddad5756380c269b2f16860b450c84a0",
+      "producing_stage": "rt-im-train",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "seed_psms": {
+      "logical_name": "seed_psms",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/seed_psms.parquet",
+      "format": "parquet",
+      "schema_name": "seed_psms",
+      "schema_version": 1,
+      "rows": 179,
+      "content_hash": "10ba6a032f04d6de9defa90201414d28de729db0034926c1325bcc00074bf287",
+      "producing_stage": "search-seed",
+      "config_hash": "e69af1f2187cb10d87f3f2eca8af105f871fb111c052be538e2e693811d4d9d9"
+    },
+    "spectra_ms1": {
+      "logical_name": "spectra_ms1",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/spectra/spectra_ms1.parquet",
+      "format": "parquet",
+      "schema_name": "spectra_ms1",
+      "schema_version": 1,
+      "rows": 60,
+      "content_hash": "830a43efaf3e6a566aa7405d236b13df327112ac6830edc9232d4d22f3bba0f5",
+      "producing_stage": "convert",
+      "config_hash": "49530e8960152a9a7fa6058b4342b6cdc6cfe95dc115622efa8a870f65274ae6"
+    },
+    "spectra_ms2": {
+      "logical_name": "spectra_ms2",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/out_chrom_v1/spectra/spectra_ms2.parquet",
+      "format": "parquet",
+      "schema_name": "spectra_ms2",
+      "schema_version": 1,
+      "rows": 480,
+      "content_hash": "b7b6109f7fda9d299ad4651cf0d6b7a0d779248e893da6922b16aa20a927efe1",
+      "producing_stage": "convert",
+      "config_hash": "49530e8960152a9a7fa6058b4342b6cdc6cfe95dc115622efa8a870f65274ae6"
+    }
+  }
+}

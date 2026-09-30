@@ -1,0 +1,18 @@
+{
+  "logical_name": "psms_competed",
+  "schema_name": "psms_competed",
+  "schema_version": 4,
+  "stage": "pool",
+  "rows": 305,
+  "content_hash": "02c5ef860fcd5aa72d32872fe87778143c617a9c6aade0b161b2bf2e47e4ca75",
+  "params": {
+    "calibration": "per_group",
+    "window_groups": 3
+  },
+  "stats": {
+    "groups": 3,
+    "overlap_duplicates_removed": 0
+  },
+  "model_identity": null,
+  "elapsed_ms": 87
+}

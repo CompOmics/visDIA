@@ -1,0 +1,24 @@
+{
+  "logical_name": "fragment_library_fragments",
+  "schema_name": "fragment_library_fragments",
+  "schema_version": 1,
+  "stage": "predict-frag",
+  "rows": 22920,
+  "content_hash": "b38834f409e8d1d763cb70abf749eb6b4fdb9055806814ecd318b201f36e1e14",
+  "params": {
+    "fragment_predictor": "Native",
+    "ms2pip_model": "HCDch2",
+    "rt_predictor": "Native",
+    "top_n": 6
+  },
+  "stats": {
+    "candidates": 3820,
+    "candidates_dropped_unpredicted": 0,
+    "candidates_dropped_with_their_pair": 0,
+    "fragments": 22920,
+    "pairs_dropped_unpredicted": 0,
+    "parse_errors": 0
+  },
+  "model_identity": "native-rt-v1; native-frag-v1",
+  "elapsed_ms": 10
+}

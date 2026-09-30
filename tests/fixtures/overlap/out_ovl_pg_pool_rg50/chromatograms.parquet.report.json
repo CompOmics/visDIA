@@ -1,0 +1,18 @@
+{
+  "logical_name": "chromatograms",
+  "schema_name": "chromatograms",
+  "schema_version": 2,
+  "stage": "pool",
+  "rows": 2745,
+  "content_hash": "8cd513964f1dd2411b2ba04026ad01eaabf575a3d9e8a29df02a8716b9e655fb",
+  "params": {
+    "calibration": "per_group",
+    "window_groups": 3
+  },
+  "stats": {
+    "groups": 3,
+    "overlap_duplicates_removed": 11
+  },
+  "model_identity": null,
+  "elapsed_ms": 183
+}

@@ -1,0 +1,18 @@
+{
+  "logical_name": "spectra_ms1",
+  "schema_name": "spectra_ms1",
+  "schema_version": 1,
+  "stage": "convert",
+  "rows": 60,
+  "content_hash": "830a43efaf3e6a566aa7405d236b13df327112ac6830edc9232d4d22f3bba0f5",
+  "params": {
+    "config_hash": "5321a7358f74fc57ced3431bad83b69bb0b6e63105ea14b06db9a94fdb84848f",
+    "max_spectra": 0,
+    "mzml": "C:/Users/robbi/mumdia_viewer_ref/smoke/fixture_b.mzML",
+    "top_peaks_ms1": 0,
+    "top_peaks_ms2": 0
+  },
+  "stats": {},
+  "model_identity": null,
+  "elapsed_ms": 9
+}

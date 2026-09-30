@@ -1,0 +1,18 @@
+{
+  "logical_name": "overlap_losers",
+  "schema_name": "overlap_losers",
+  "schema_version": 1,
+  "stage": "pool",
+  "rows": 140,
+  "content_hash": "15ee24cfcad166fccfebe492e6d876477bf29fb4e5563fa638d1b69ed1d70158",
+  "params": {
+    "calibration": "per_group",
+    "window_groups": 120
+  },
+  "stats": {
+    "groups": 120,
+    "overlap_duplicates_removed": 140
+  },
+  "model_identity": null,
+  "elapsed_ms": 3232
+}
