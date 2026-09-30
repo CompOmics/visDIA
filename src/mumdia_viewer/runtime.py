@@ -7,8 +7,9 @@ Measured on the development machine (32 threads, Windows):
   set before numpy is first imported, so :func:`configure_environment` must run first;
 * pyarrow imports pandas lazily on its first conversion (220-280 ms); a warm-up call
   moves that cost to start-up;
-* Arrow's allocator keeps freed memory; :func:`release_memory` returns it after wide
-  reads.
+* Arrow's default allocator (mimalloc) keeps freed memory; the system allocator returns
+  it (see :func:`configure_environment`), and :func:`release_memory` releases what the
+  pool holds.
 
 The command-line entry point calls :func:`configure_environment` before any other
 import. A notebook may call it too, before importing numpy.
@@ -22,9 +23,16 @@ ARROW_THREADS = 8
 
 
 def configure_environment() -> None:
-    """Set thread-count environment variables; call before numpy is imported."""
+    """Set thread and allocator environment variables; call before numpy or pyarrow.
+
+    ``ARROW_DEFAULT_MEMORY_POOL=system`` returns freed memory to the system. On the
+    Astral single run it halved the viewer's private memory (1.33-1.49 GB to
+    0.64-0.72 GB after 21 precursor details) for about 17% slower warm details
+    (184 to 216 ms). Existing values are kept, so a user can choose otherwise.
+    """
     os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
     os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("ARROW_DEFAULT_MEMORY_POOL", "system")
 
 
 def configure_arrow(threads: int = ARROW_THREADS) -> None:

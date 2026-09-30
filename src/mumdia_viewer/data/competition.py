@@ -224,7 +224,7 @@ def partner_map(rs: ResultSet) -> PartnerMap:
         rs._memo["partner_map"] = result
         return result
     identity = lib.identity()
-    cached = rs.cache.load_arrays(identity, "partner_map_v1")
+    cached = rs.cache.load_arrays(identity, "partner_map_v2")
     if cached is not None:
         valid = bool(cached["valid"][0])
         reason = _VALID if valid else _INVALID
@@ -237,7 +237,7 @@ def partner_map(rs: ResultSet) -> PartnerMap:
     is_decoy = np.asarray(table.column("label").to_pylist(), dtype=object) == "decoy"
     n = cid.size
     valid = bool(np.array_equal(cid, np.arange(n)))
-    partner = np.full(n, -1, dtype=np.int64)
+    partner = np.full(n, -1, dtype=np.int64 if n >= 2**31 else np.int32)
     if valid:
         order = np.argsort(pid, kind="stable")
         sp = pid[order]
@@ -248,9 +248,7 @@ def partner_map(rs: ResultSet) -> PartnerMap:
             a, b = order[0::2], order[1::2]
             valid = bool(np.all(is_decoy[a] != is_decoy[b]))
             partner[a], partner[b] = b, a
-    rs.cache.save_arrays(
-        identity, "partner_map_v1", partner=partner.astype(np.int64), valid=np.array([valid])
-    )
+    rs.cache.save_arrays(identity, "partner_map_v2", partner=partner, valid=np.array([valid]))
     reason = _VALID if valid else _INVALID
     result = PartnerMap(partner if valid else None, valid, reason, str(lib.path))
     rs._memo["partner_map"] = result
