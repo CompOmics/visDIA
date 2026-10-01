@@ -56,6 +56,7 @@ from dash import ALL, ClientsideFunction, Input, Output, State, dcc, html
 from dash import no_update as NO
 
 from mumdia_viewer.data import ResultSet, ViewerError
+from mumdia_viewer.data.export import table_export
 from mumdia_viewer.data.fasta import Fasta, protein_coverage
 from mumdia_viewer.data.rescore import rescore_info
 from mumdia_viewer.data.tables import (
@@ -87,6 +88,7 @@ from .browser_grid import (
     visible_columns,
     winner_matters,
 )
+from .icons import icon
 from .state import (
     DEFAULT_THRESHOLD,
     THRESHOLD_STOPS,
@@ -876,6 +878,15 @@ def content(ctx: PageContext) -> list[Any]:
             [
                 panels.locate_action(),
                 html.Span("", id="ib-range", className="ib-range"),
+                html.Button(
+                    [icon("external", 12), "TSV"],
+                    id="ib-tsv",
+                    n_clicks=0,
+                    className="ib-tsv",
+                    title="Download every row of this table under its filters as TSV "
+                    "(the engine's columns as they are)",
+                ),
+                dcc.Download(id="ib-download"),
                 panels.columns_menu(column_options(defs, experiment=experiment), shown),
             ],
             className="ib-pright",
@@ -1070,6 +1081,24 @@ def preview_answer(ctx: PageContext, prec: Mapping[str, Any] | None) -> dict[str
 def register(app, get_rs, base: str) -> None:
     """Callbacks of the identification page."""
     get_fasta = getattr(app, "mv_fasta", lambda: None)
+
+    # Every row of the first table under its filters, as TSV.
+    @app.callback(
+        Output("ib-download", "data"),
+        Output("ib-notice-text", "children", allow_duplicate=True),
+        Output("ib-notice", "className", allow_duplicate=True),
+        Input("ib-tsv", "n_clicks"),
+        State("ib-view", "data"),
+        prevent_initial_call=True,
+    )
+    def download_table(n, store):
+        if not n:
+            return NO, NO, NO
+        try:
+            out = table_export(get_rs(), Filters.from_store(store).table_query())
+        except (ViewerError, ValueError) as exc:
+            return NO, f"The table was not exported: {exc}", "ib-notice"
+        return {"content": out.text, "filename": out.filename}, NO, NO
 
     # The coverage strip of the selected protein group (asked for by the browser).
     @app.callback(

@@ -9,7 +9,7 @@ from typing import Any
 import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
-from dash import ClientsideFunction, Input, Output, State, dcc, html
+from dash import ClientsideFunction, Input, Output, State, dcc, html, no_update
 
 from mumdia_viewer.data import ResultSet, ViewerError
 from mumdia_viewer.data import counts as counts_mod
@@ -676,7 +676,36 @@ def layout(ctx: PageContext) -> Any:
     return dmc.Stack(
         [
             dmc.Group(
-                [_identity(rs, summary), _run_stats(rs)], justify="space-between", align="flex-end"
+                [
+                    _identity(rs, summary),
+                    dmc.Stack(
+                        [
+                            _run_stats(rs),
+                            dmc.Group(
+                                [
+                                    dmc.Tooltip(
+                                        dmc.Button(
+                                            "Report",
+                                            id="ov-report",
+                                            n_clicks=0,
+                                            size="xs",
+                                            variant="light",
+                                            leftSection=icon("external", 13),
+                                        ),
+                                        label="Download this overview as one HTML file "
+                                        "that opens offline",
+                                    ),
+                                    dcc.Download(id="ov-report-download"),
+                                ],
+                                justify="flex-end",
+                            ),
+                        ],
+                        gap=8,
+                        align="flex-end",
+                    ),
+                ],
+                justify="space-between",
+                align="flex-end",
             ),
             html.Div(_kpi_cards(ctx, curves), id="ov-kpis"),
             _slider(ctx, _slider_data(rs, curves)),
@@ -702,6 +731,22 @@ def layout(ctx: PageContext) -> Any:
 
 
 def register(app, get_rs, base: str) -> None:
+    @app.callback(
+        Output("ov-report-download", "data"),
+        Input("ov-report", "n_clicks"),
+        State("threshold", "data"),
+        prevent_initial_call=True,
+    )
+    def report(n, t):
+        if not n:
+            return no_update
+        from .report import overview_report
+        from .state import parse_threshold
+
+        rs = get_rs()
+        text = overview_report(rs, parse_threshold(t))
+        return {"content": text, "filename": f"{rs.root.name}-overview.html"}
+
     app.clientside_callback(
         ClientsideFunction("mv", "slide"),
         *[Output(f"kpi-n-{u}", "children") for u in CARD_UNITS],

@@ -446,6 +446,57 @@
     },
   });
 
+  // ------------------------------------------------------------------ figure export
+  // The modebar's camera saves SVG (theme.GRAPH_CONFIG); this adds a PNG button next to
+  // it on every graph. Plotly redraws its modebar, so the button is added again when it
+  // is missing.
+
+  function graphName(gd) {
+    const host = gd.closest("[id]");
+    let name = host ? host.id : "figure";
+    try {
+      const parsed = JSON.parse(name);
+      name = parsed.name || name;
+    } catch (e) {
+      /* a plain id */
+    }
+    return String(name).replace(/[^A-Za-z0-9_-]+/g, "-") || "figure";
+  }
+
+  const PNG_ICON =
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" ' +
+    'width="18" height="14" rx="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>';
+
+  function addPngButtons() {
+    if (!window.Plotly) {
+      return;
+    }
+    document.querySelectorAll(".js-plotly-plot").forEach(function (gd) {
+      const bar = gd.querySelector(".modebar");
+      if (!bar || bar.querySelector(".mv-png")) {
+        return;
+      }
+      const group = document.createElement("div");
+      group.className = "modebar-group";
+      const button = document.createElement("a");
+      button.className = "modebar-btn mv-png";
+      button.setAttribute("rel", "tooltip");
+      button.setAttribute("data-title", "Download as PNG");
+      button.innerHTML = PNG_ICON;
+      button.addEventListener("click", function () {
+        window.Plotly.downloadImage(gd, { format: "png", scale: 2, filename: graphName(gd) });
+      });
+      group.appendChild(button);
+      bar.insertBefore(group, bar.firstChild);
+    });
+  }
+
+  new MutationObserver(function () {
+    clearTimeout(addPngButtons.timer);
+    addPngButtons.timer = setTimeout(addPngButtons, 120);
+  }).observe(document.documentElement, { childList: true, subtree: true });
+
   // Keyboard shortcuts: arrows step through scans on the precursor page, "/" focuses
   // the search box.
   document.addEventListener("keydown", function (event) {
