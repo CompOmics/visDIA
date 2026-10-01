@@ -17,7 +17,16 @@ DEFAULT_THRESHOLD = 0.01
 # counted with the engine's columns (data.counts.counts_at), never interpolated.
 THRESHOLD_STOPS: tuple[float, ...] = (0.0001, 0.0005, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1)
 
-PAGES = ("overview", "identifications", "precursor", "protein", "calibration", "qc", "quant")
+PAGES = (
+    "overview",
+    "identifications",
+    "precursor",
+    "protein",
+    "calibration",
+    "qc",
+    "quant",
+    "notes",
+)
 
 
 def stop_label(t: float) -> str:

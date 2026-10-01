@@ -50,6 +50,7 @@ from . import detail_figures as dfig
 from . import detail_ions as ions
 from . import detail_preview as pv
 from . import detail_view as view
+from .notes import note_card
 from .state import PageContext, href, parse_threshold
 from .widgets import section
 
@@ -402,6 +403,7 @@ def layout(ctx: PageContext) -> Any:
     page = [
         cards.hero(ctx, d, frags),
         cards.verdict(ctx, d, tiles),
+        note_card(ctx, run, int(cid), dict(d.scored)),
         cards.notes(d),
         linked,
         cards.evidence_grid(d, pct_map),

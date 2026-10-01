@@ -22,9 +22,11 @@ from dash import (
 
 from mumdia_viewer import __version__
 from mumdia_viewer.data import ResultSet
+from mumdia_viewer.data.errors import ViewerError
 from mumdia_viewer.data.fasta import Fasta
+from mumdia_viewer.data.notes import NoteBook
 
-from . import browser, calibration, detail, overview, protein, qc, quant
+from . import browser, calibration, detail, notes, overview, protein, qc, quant
 from .icons import icon
 from .state import (
     DEFAULT_THRESHOLD,
@@ -48,6 +50,7 @@ PAGES = {
     "calibration": calibration,
     "qc": qc,
     "quant": quant,
+    "notes": notes,
 }
 # Navigation entries after the results: (page, label, icon).
 VIEWS = (
@@ -55,6 +58,7 @@ VIEWS = (
     ("calibration", "Calibration", "calibration"),
     ("qc", "Run QC", "spectrum"),
     ("quant", "Quant QC", "quant"),
+    ("notes", "Notes", "check"),
 )
 
 
@@ -249,7 +253,7 @@ def _navbar(rs: ResultSet, base: str) -> Any:
                     link("identifications", "Identifications", "table"),
                     link("precursor", "Precursor detail", "peak", disabled=True),
                     dmc.Text("Views", className="mv-nav-heading", mt="md"),
-                    *[link(page, label, name) for page, label, name in VIEWS],
+                    *[link(page, label, name, **_nav_extra(page)) for page, label, name in VIEWS],
                 ],
                 className="mv-nav",
             ),
@@ -275,6 +279,14 @@ def _navbar(rs: ResultSet, base: str) -> Any:
         ],
         p="sm",
     )
+
+
+def _nav_extra(page: str) -> dict[str, Any]:
+    """The notes entry carries the number of notes of the result set."""
+    if page != "notes":
+        return {}
+    badge = dmc.Badge("0", id="nav-notes-count", size="xs", variant="light", color="gray")
+    return {"rightSection": badge}
 
 
 def _recent_links(recent: list[dict[str, Any]] | None, base: str) -> Any:
@@ -373,6 +385,8 @@ def create_app(
             dcc.Store(id="scheme", storage_type="local"),
             dcc.Store(id="templates", data=_templates()),
             dcc.Store(id="recent", storage_type="session", data=[]),
+            # Bumped when a note is saved: the navigation's count follows.
+            dcc.Store(id="notes-version", data=0),
             shell,
         ],
         id="provider",
@@ -487,6 +501,17 @@ def create_app(
         if not n or not text:
             return no_update
         return href(base, "identifications", {"search": text})
+
+    @app.callback(
+        Output("nav-notes-count", "children"),
+        Input("notes-version", "data"),
+        Input("url", "pathname"),
+    )
+    def notes_count(_version, _path):
+        try:
+            return f"{len(NoteBook(get_rs()).notes()):,}"
+        except ViewerError:
+            return "-"
 
     for module in PAGES.values():
         module.register(app, get_rs, base)

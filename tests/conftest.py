@@ -38,8 +38,9 @@ FIXTURE_DIRS = {
 
 @pytest.fixture(scope="session", autouse=True)
 def _isolated_cache(tmp_path_factory: pytest.TempPathFactory) -> None:
-    """Keep the tests' derived data out of the user's viewer cache."""
+    """Keep the tests' derived data and notes out of the user's viewer directories."""
     os.environ["MUMDIA_VIEWER_CACHE_DIR"] = str(tmp_path_factory.mktemp("viewer_cache"))
+    os.environ["MUMDIA_VIEWER_NOTES_DIR"] = str(tmp_path_factory.mktemp("viewer_notes"))
 
 
 @pytest.fixture(scope="session")

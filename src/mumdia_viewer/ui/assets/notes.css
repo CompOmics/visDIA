@@ -1,0 +1,17 @@
+/* mumdia-viewer: the notes page (ui/notes.py). */
+
+.nt-grid .nt-accepted {
+  color: var(--mantine-color-green-light-color);
+  font-weight: 700;
+}
+.nt-grid .nt-rejected {
+  color: var(--mantine-color-red-light-color);
+  font-weight: 700;
+}
+.nt-grid .nt-unsure {
+  color: var(--mantine-color-yellow-light-color);
+  font-weight: 700;
+}
+.nt-grid .ag-row {
+  cursor: pointer;
+}
