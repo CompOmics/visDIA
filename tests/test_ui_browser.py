@@ -588,6 +588,12 @@ def test_column_defs(open_fixture, unit, role):
     assert f"{mark} ≤ {t} (the header threshold)" in defs[0]["headerTooltip"]
     assert "{t}" in defs[0]["cellRendererParams"]["tipTemplate"]
     extra = {"_valid", "_open"} | ({"_species"} if unit == "protein_group" else set())
+    # The user's verdict (validation notes) is a column of the precursor grids only.
+    if unit == "precursor":
+        extra |= {"_note"}
+        assert defs[1]["colId"] == "_note" and defs[1]["cellRenderer"] == "MvNote"
+    else:
+        assert "_note" not in by
     assert set(by) - extra == set(page.rows.columns)
     key = "protein_group" if unit == "protein_group" else "peptidoform"
     assert by[key]["lockVisible"] is True

@@ -89,6 +89,7 @@ from .browser_grid import (
     winner_matters,
 )
 from .icons import icon
+from .notes import note_map
 from .state import (
     DEFAULT_THRESHOLD,
     THRESHOLD_STOPS,
@@ -405,7 +406,7 @@ def child_table(
     columns = child_columns(list(page.rows.columns))
     return Child(
         unit,
-        records(page.rows, base, unit, columns),
+        records(page.rows, base, unit, columns, notes=note_map(rs)),
         int(page.total),
         page.description,
         dict(page.column_labels),
@@ -445,7 +446,7 @@ def first_block(
         page = identification_table(rs, f.table_query(offset=0, limit=BLOCK_SIZE))
     except (ViewerError, ValueError) as exc:
         return None, [], str(exc)
-    return page, records(page.rows, base, f.unit), None
+    return page, records(page.rows, base, f.unit, notes=note_map(rs)), None
 
 
 def initial_selection(f: Filters, want: Selection, first: Mapping[str, Any] | None) -> Selection:
@@ -1031,7 +1032,7 @@ def rows_response(
             f"Unexpected error: {type(exc).__name__}: {exc}",
             q_active(f, rs.is_experiment),
         )
-    data = records(page.rows, base, f.unit)
+    data = records(page.rows, base, f.unit, notes=note_map(rs))
     return (
         {"rowData": data, "rowCount": int(page.total)},
         page,

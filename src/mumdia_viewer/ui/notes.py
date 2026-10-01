@@ -58,6 +58,17 @@ def verdict_badge(verdict: str | None) -> Any:
     )
 
 
+def note_map(rs: ResultSet) -> dict[str, tuple[str, str]]:
+    """``"run:candidate_id"`` to (verdict, comment) for the grids; empty when unreadable."""
+    book, _error = _book(rs)
+    if book is None:
+        return {}
+    try:
+        return {n.key: (n.verdict, n.comment) for n in book.notes()}
+    except ViewerError:
+        return {}
+
+
 # --------------------------------------------------------------------------- precursor card
 
 

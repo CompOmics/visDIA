@@ -268,6 +268,22 @@
     return h("span", { className: "mv-valid mv-valid-" + kind, title: tip }, mark);
   };
 
+  // The user's verdict (validation notes) on a precursor row.
+  var NOTE_MARKS = { accepted: "A", rejected: "R", unsure: "U" };
+  dag.MvNote = function (props) {
+    var verdict = props.value;
+    if (!verdict || !NOTE_MARKS[verdict]) {
+      return null;
+    }
+    var row = props.data || {};
+    var text = row._note_text ? ": " + String(row._note_text).slice(0, 120) : "";
+    return h(
+      "span",
+      { className: "mv-note mv-note-" + verdict, title: "Your verdict: " + verdict + text },
+      NOTE_MARKS[verdict]
+    );
+  };
+
   // In-cell bar with its value (JSparklines). cellRendererParams: scale ("linear",
   // "log10", "neglog10"), min, max, colour, passColour and failColour (with a
   // threshold: q bars), format (see formatValue), width, tip (what the bar encodes).

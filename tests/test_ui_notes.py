@@ -53,3 +53,22 @@ def test_the_shell_counts_notes(open_fixture, tmp_path, monkeypatch):
     outputs = " ".join(d["output"] for d in client.get("/y/_dash-dependencies").get_json())
     assert "nav-notes-count.children" in outputs and "nt-download.data" in outputs
     assert "pd-note-status.children" in outputs
+
+
+def test_grid_rows_carry_verdicts_on_precursors_only(open_fixture, tmp_path, monkeypatch):
+    from mumdia_viewer.data.tables import TableQuery, identification_table
+    from mumdia_viewer.ui.browser_grid import records
+
+    monkeypatch.setenv("MUMDIA_VIEWER_NOTES_DIR", str(tmp_path / "n3"))
+    rs = open_fixture("single")
+    page = identification_table(rs, TableQuery(unit="precursor", limit=5))
+    cid = int(page.rows["candidate_id"].iloc[1])
+    NoteBook(rs).put("", cid, "unsure", "check MS1")
+    rows = records(page.rows, "/x/", "precursor", notes=notes.note_map(rs))
+    marked = [r for r in rows if r.get("_note")]
+    assert [(r["candidate_id"], r["_note"], r["_note_text"]) for r in marked] == [
+        (cid, "unsure", "check MS1")
+    ]
+    peptides = identification_table(rs, TableQuery(unit="peptide", limit=5))
+    rows = records(peptides.rows, "/x/", "peptide", notes=notes.note_map(rs))
+    assert not any("_note" in r for r in rows)

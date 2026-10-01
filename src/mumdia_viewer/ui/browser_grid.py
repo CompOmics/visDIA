@@ -748,6 +748,26 @@ def column_defs(
             "headerTooltip": mark_tip(q_mark, at, q_words, spike),
         }
     ]
+    if table == "precursor":
+        defs.append(
+            {
+                "colId": "_note",
+                "headerName": "",
+                "field": "_note",
+                "cellRenderer": "MvNote",
+                "pinned": "left",
+                "lockPosition": "left",
+                "width": 34,
+                "minWidth": 34,
+                "maxWidth": 34,
+                "resizable": False,
+                "suppressMovable": True,
+                "sortable": not top,
+                "headerClass": "ib-head-note",
+                "headerTooltip": "Your verdict (validation notes): A accepted, R rejected, "
+                "U unsure. Give one on the precursor page (keys A, R, U).",
+            }
+        )
     bar_width = BAR_WIDTH if top else CHILD_BAR_WIDTH
     rest = [c for c in columns if c not in shown]
     for column in [*shown, *rest]:
@@ -883,7 +903,7 @@ def column_defs(
     return defs
 
 
-FIXED = ("_valid", "_open")
+FIXED = ("_valid", "_note", "_open")
 
 
 def column_options(
@@ -963,10 +983,14 @@ def records(
     base: str,
     unit: str = "precursor",
     columns: Sequence[str] | None = None,
+    notes: Mapping[str, tuple[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Rows of a table page for a grid, with the row id and the precursor page address.
 
     ``columns`` keeps only those columns (a child grid's, see :func:`child_columns`).
+    ``notes`` (``"run:candidate_id"`` to the user's verdict and comment) puts the
+    verdict on precursor rows (``_note``); a protein or peptide row would show the
+    verdict of its representative precursor, so it gets none.
     """
     if columns is not None:
         df = df[[c for c in columns if c in df.columns]]
@@ -982,6 +1006,10 @@ def records(
             if cid is not None
             else None
         )
+        if notes and unit == "precursor" and cid is not None:
+            note = notes.get(f"{row.get('run') or ''}:{int(cid)}")
+            if note:
+                row["_note"], row["_note_text"] = note
         out.append(row)
     return out
 
