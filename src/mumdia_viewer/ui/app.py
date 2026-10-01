@@ -24,7 +24,7 @@ from mumdia_viewer import __version__
 from mumdia_viewer.data import ResultSet
 from mumdia_viewer.data.fasta import Fasta
 
-from . import browser, detail, overview
+from . import browser, calibration, detail, overview, protein, qc, quant
 from .icons import icon
 from .state import (
     DEFAULT_THRESHOLD,
@@ -40,7 +40,22 @@ from .widgets import notice_list, peptidoform
 
 ASSETS = Path(__file__).parent / "assets"
 RECENT_MAX = 8
-PAGES = {"overview": overview, "identifications": browser, "precursor": detail}
+PAGES = {
+    "overview": overview,
+    "identifications": browser,
+    "precursor": detail,
+    "protein": protein,
+    "calibration": calibration,
+    "qc": qc,
+    "quant": quant,
+}
+# Navigation entries after the results: (page, label, icon).
+VIEWS = (
+    ("protein", "Protein", "layers"),
+    ("calibration", "Calibration", "calibration"),
+    ("qc", "Run QC", "spectrum"),
+    ("quant", "Quant QC", "quant"),
+)
 
 
 # The page skeleton: Dash's default plus window.MV, the constants the browser code
@@ -233,6 +248,8 @@ def _navbar(rs: ResultSet, base: str) -> Any:
                     link("overview", "Overview", "overview"),
                     link("identifications", "Identifications", "table"),
                     link("precursor", "Precursor detail", "peak", disabled=True),
+                    dmc.Text("Views", className="mv-nav-heading", mt="md"),
+                    *[link(page, label, name) for page, label, name in VIEWS],
                 ],
                 className="mv-nav",
             ),
@@ -433,15 +450,15 @@ def create_app(
         kept = [r for r in (recent or []) if (r.get("run"), r.get("cid")) != key]
         return content, [seen, *kept][:RECENT_MAX]
 
+    nav_pages = ["overview", "identifications", "precursor", *[v[0] for v in VIEWS]]
+
     @app.callback(
-        Output("nav-overview", "active"),
-        Output("nav-identifications", "active"),
-        Output("nav-precursor", "active"),
+        *[Output(f"nav-{p}", "active") for p in nav_pages],
         Input("url", "pathname"),
     )
     def active(pathname):
         page = page_of(pathname, base)
-        return page == "overview", page == "identifications", page == "precursor"
+        return tuple(page == p for p in nav_pages)
 
     @app.callback(
         Output("nav-recent", "children"),
