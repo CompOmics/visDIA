@@ -1,0 +1,1467 @@
+/* mumdia-viewer: the precursor page (pd-*) and its preview (pv-*). Colours come from
+   Mantine variables, so the page follows the light and the dark theme. */
+
+/* Score bars: the identification grid's colour (browser.css --ib-bar-score). */
+:root {
+  --pd-bar-score: var(--mantine-color-grape-5);
+  --pd-tip-bg: var(--mantine-color-gray-9);
+  --pd-tip-fg: var(--mantine-color-white);
+}
+[data-mantine-color-scheme="dark"] {
+  --pd-bar-score: var(--mantine-color-grape-4);
+  --pd-tip-bg: var(--mantine-color-gray-2);
+  --pd-tip-fg: var(--mantine-color-black);
+}
+
+/* The one tooltip of the elements with data-tip (detail.js), like Mantine's. */
+.pd-tip {
+  position: fixed;
+  z-index: 400;
+  display: none;
+  max-width: 300px;
+  padding: 5px 10px;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--pd-tip-bg);
+  color: var(--pd-tip-fg);
+  font-family: var(--mantine-font-family);
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.45;
+  pointer-events: none;
+  box-shadow: var(--mantine-shadow-sm);
+}
+.pd-linked [data-tip] {
+  cursor: help;
+}
+.pd-linked .pd-mark[data-tip], .pd-linked .pd-lc[data-tip] {
+  cursor: pointer;
+}
+
+.pd-page {
+  --pd-elution: rgba(47, 158, 68, 0.22);
+  --pd-integration: var(--mantine-color-violet-6);
+  --pd-apex: var(--mantine-color-green-7);
+  --pd-pred: var(--mantine-color-gray-6);
+  --pd-scan: rgba(66, 99, 235, 0.75);
+}
+
+.pd-mono {
+  font-family: var(--mantine-font-family-monospace);
+}
+.pd-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pd-nowrap {
+  white-space: nowrap;
+}
+.pd-dim {
+  color: var(--mantine-color-dimmed);
+}
+.pd-link {
+  color: var(--mantine-color-indigo-6);
+  text-decoration: none;
+}
+.pd-link:hover {
+  text-decoration: underline;
+}
+.pd-small {
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+.pd-info {
+  display: inline-flex;
+  color: var(--mantine-color-dimmed);
+  cursor: help;
+}
+
+/* ---------------------------------------------------------------- icons */
+/* The check and the cross of icons.py as CSS masks: one rule here instead of an inline
+   data URI on every mark of the page's tables (detail_cards.ico). */
+.pd-ico {
+  display: inline-block;
+  vertical-align: middle;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+.pd-ico-check {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m5%2012.5%204.5%204.5L19%207.5%22/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m5%2012.5%204.5%204.5L19%207.5%22/%3E%3C/svg%3E");
+}
+.pd-ico-x {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%206l12%2012M18%206%206%2018%22/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%206l12%2012M18%206%206%2018%22/%3E%3C/svg%3E");
+}
+
+/* ---------------------------------------------------------------- header */
+.pd-back {
+  color: var(--mantine-color-dimmed);
+  text-decoration: none;
+  display: inline-flex;
+}
+.pd-back:hover {
+  color: var(--mantine-color-indigo-6);
+}
+.pd-title .mv-pep {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  word-break: break-all;
+}
+.pd-chip-link {
+  text-decoration: none;
+}
+.pd-cid {
+  padding: 1px 4px 1px 8px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+}
+.pd-copy {
+  cursor: pointer;
+  opacity: 0.6;
+  display: inline-flex;
+  font-size: 0.8rem;
+}
+.pd-copy:hover {
+  opacity: 1;
+}
+.pd-facts {
+  flex-shrink: 0;
+}
+.pd-fact {
+  min-width: 104px;
+}
+.pd-fact-label {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+.pd-fact-value {
+  font-size: 1.12rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pd-fact-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ---------------------------------------------------------------- verdict strip */
+/* One row of tiles (it wraps on narrow screens): the column, its mark and its value;
+   the unit and the provenance are in each tile's tooltip. */
+#pd-verdict {
+  container-type: inline-size;
+}
+.pd-vstrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  align-items: stretch;
+  gap: 8px;
+}
+.pd-vstrip > * {
+  min-width: 0;
+}
+/* A narrow strip: the title is a line over the tiles, so the tiles keep one row. */
+@container (max-width: 1000px) {
+  .pd-vstrip > :first-child {
+    grid-column: 1 / -1;
+  }
+  .pd-vstrip .pd-vhead {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 0 2px;
+  }
+}
+.pd-vhead {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  height: 100%;
+  padding: 0 8px 0 4px;
+  cursor: help;
+}
+.pd-vh-t {
+  font-size: 0.76rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pd-vh-n {
+  font-size: 0.72rem;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+.pd-vt {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 5px 10px 6px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-top-width: 3px;
+  border-radius: var(--mantine-radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  cursor: help;
+}
+.pd-vt-indigo { border-top-color: var(--mantine-color-indigo-6); }
+.pd-vt-violet { border-top-color: var(--mantine-color-violet-6); }
+.pd-vt-teal { border-top-color: var(--mantine-color-teal-6); }
+.pd-vt-pink { border-top-color: var(--mantine-color-pink-6); }
+.pd-vt-grape { border-top-color: var(--mantine-color-grape-6); }
+.pd-vt-green { border-top-color: var(--mantine-color-green-6); }
+.pd-vt-gray { border-top-color: var(--mantine-color-gray-5); }
+.pd-vt-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  height: 18px;
+}
+.pd-vt-col {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+}
+.pd-vt-side {
+  font-size: 0.66rem;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+.pd-vt-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 26px;
+}
+.pd-vt-val {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.pd-vt-group {
+  margin-right: 3px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+}
+.pd-vt-link {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+.pd-vt-none {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+}
+.pd-vt-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.pd-vt-score .mv-spark-cell {
+  gap: 0;
+}
+
+/* ---------------------------------------------------------------- notes */
+.pd-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pd-note-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  cursor: help;
+}
+.pd-note-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pd-note-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.pd-note-yellow { color: var(--mantine-color-yellow-7); }
+.pd-note-orange { color: var(--mantine-color-orange-7); }
+.pd-note-lime { color: var(--mantine-color-lime-7); }
+.pd-note-blue { color: var(--mantine-color-blue-6); }
+.pd-notes-spoiler .mantine-Spoiler-control {
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
+/* ---------------------------------------------------------------- linked panels */
+/* Two columns from Mantine's lg breakpoint: XIC and retention time left, the spectrum
+   and its fragments right. Below it one column, in the order XIC, spectrum, fragments,
+   retention time, so that the XIC and the spectrum it drives are next to each other;
+   the plots are shorter there. */
+.pd-linked-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--mantine-spacing-lg);
+  align-items: start;
+}
+.pd-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+  min-width: 0;
+}
+/* The plots take the height of their wrapper (Dash sets a responsive graph to 100%). */
+#pd-xic-wrap {
+  height: 520px;
+}
+#pd-mirror-wrap {
+  height: 400px;
+}
+#pd-xic-wrap > .mv-graph, #pd-mirror-wrap > .mv-graph {
+  height: 100% !important;
+}
+@media (max-width: 74.99em) {
+  .pd-linked-grid {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .pd-col {
+    display: contents;
+  }
+  #pd-xic-card { order: 1; }
+  #pd-mirror-card { order: 2; }
+  #pd-frag-card { order: 3; }
+  #pd-rt-card { order: 4; }
+  #pd-xic-wrap {
+    height: 380px;
+  }
+  #pd-mirror-wrap {
+    height: 340px;
+  }
+}
+
+/* The shown scan is on its way from the server: the spectrum and the tables still show
+   the previous one (detail.js sets .pd-pending). */
+#pd-mirror-wrap, #pd-seq, #pd-frag-table, #pd-ladder, #pd-scan-info, #pd-tol {
+  transition: opacity 90ms ease;
+}
+.pd-pending #pd-mirror-wrap, .pd-pending #pd-seq, .pd-pending #pd-frag-table,
+.pd-pending #pd-ladder, .pd-pending #pd-scan-info, .pd-pending #pd-tol {
+  opacity: 0.45;
+  transition: opacity 120ms ease 60ms;
+}
+
+/* ---------------------------------------------------------------- marker key */
+.pd-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: -2px 0 2px;
+}
+.pd-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  cursor: help;
+  white-space: nowrap;
+}
+.pd-key-label {
+  font-weight: 600;
+}
+.pd-key-value {
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+.pd-sw {
+  display: inline-block;
+  width: 18px;
+  height: 11px;
+  position: relative;
+  flex-shrink: 0;
+}
+.pd-sw-band {
+  background: var(--pd-elution);
+  border-radius: 2px;
+}
+.pd-sw-scan {
+  background: rgba(66, 99, 235, 0.16);
+  border-radius: 2px;
+}
+.pd-sw-scan::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: -1px;
+  height: 13px;
+  border-left: 2px solid var(--pd-scan);
+}
+.pd-sw-solid::after, .pd-sw-dot::after, .pd-sw-dashdot::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: -1px;
+  height: 13px;
+  border-left: 2px solid var(--pd-c);
+}
+.pd-sw-dot::after {
+  border-left-style: dotted;
+}
+.pd-sw-dashdot::after {
+  border-left-style: dashed;
+}
+.pd-sw-box {
+  border: 1.5px dashed var(--pd-c);
+  border-radius: 2px;
+}
+.pd-sw-arrow::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid var(--pd-c);
+}
+
+/* ---------------------------------------------------------------- graphs */
+.pd-graph-wrap {
+  margin: 0 -6px;
+}
+/* The shown scan over the XIC (placed by detail.js; clicks and hovers pass through). */
+#pd-xic-wrap {
+  position: relative;
+}
+.pd-scanmark {
+  position: absolute;
+  display: none;
+  width: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.pd-scanband {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--pd-band-w, 6px) / -2);
+  width: var(--pd-band-w, 6px);
+  background: color-mix(in srgb, var(--mantine-color-indigo-6) 13%, transparent);
+}
+.pd-scanline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: color-mix(in srgb, var(--mantine-color-indigo-6) 85%, transparent);
+}
+.pd-scrub {
+  padding-top: 2px;
+}
+.pd-hint {
+  margin-top: 26px;
+}
+#pd-scrub-wrap .mantine-Slider-markLabel {
+  font-size: 0.68rem;
+}
+
+/* ---------------------------------------------------------------- mirror and fragments */
+.pd-tol {
+  margin: 4px 0 0;
+}
+.pd-ftable td, .pd-ftable th {
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.pd-ftable tbody tr {
+  cursor: pointer;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+.pd-ftable tbody tr:hover, .pd-ftable tbody tr.pd-hl {
+  background: var(--mantine-color-default-hover);
+}
+.pd-ftable tbody tr.pd-hl td:first-child {
+  box-shadow: inset 3px 0 0 var(--mantine-color-indigo-6);
+}
+.pd-ftable tbody tr.pd-dim {
+  opacity: 0.45;
+}
+.pd-ftable tbody tr.pd-off {
+  opacity: 0.35;
+}
+.pd-ftable tbody tr.pd-off .pd-fname {
+  text-decoration: line-through;
+}
+.pd-ftable tbody tr.pd-unmatched .pd-fname {
+  color: var(--mantine-color-dimmed);
+}
+.pd-th-derived {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  vertical-align: 1px;
+  color: var(--mantine-color-grape-7);
+  background: var(--mantine-color-grape-light);
+}
+.pd-fname {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mantine-font-family-monospace);
+  font-weight: 600;
+}
+.pd-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.pd-ppm {
+  font-variant-numeric: tabular-nums;
+}
+.pd-yes {
+  color: var(--mantine-color-green-7);
+  display: inline-flex;
+}
+.pd-no {
+  color: var(--mantine-color-dimmed);
+  font-size: 0.72rem;
+}
+
+/* ---------------------------------------------------------------- evidence rows */
+.pd-ev-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 10px;
+}
+.pd-ev-left {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  min-width: 0;
+}
+.pd-ev-label {
+  font-size: 0.84rem;
+  line-height: 1.35;
+  cursor: help;
+}
+.pd-ev-right {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+.pd-ev-value {
+  font-size: 0.9rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.pd-ev-unit {
+  font-size: 0.72rem;
+  color: var(--mantine-color-dimmed);
+}
+.pd-ev-na {
+  font-size: 0.84rem;
+  color: var(--mantine-color-dimmed);
+}
+.pd-ev-note {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--mantine-color-dimmed);
+  margin-top: 2px;
+}
+.pd-pct {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.pd-pbar {
+  flex: 1;
+  min-width: 60px;
+}
+.pd-pct-text {
+  font-size: 0.68rem;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+.pd-unit {
+  max-width: 320px;
+  white-space: normal;
+}
+
+/* RT gauge: the window, the elution and integration bounds, the prediction and the apex */
+.pd-gauge-box {
+  margin: 4px 0 10px;
+}
+.pd-gauge {
+  position: relative;
+  height: 44px;
+}
+.pd-gauge-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 26px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--mantine-color-default-border);
+}
+.pd-gauge-elution {
+  position: absolute;
+  top: 19px;
+  height: 20px;
+  border-radius: 3px;
+  background: var(--pd-elution);
+}
+.pd-gauge-integration {
+  position: absolute;
+  top: 16px;
+  height: 26px;
+  border-radius: 3px;
+  border: 1.5px dashed var(--pd-integration);
+}
+.pd-gauge-pred {
+  position: absolute;
+  top: 14px;
+  height: 30px;
+  width: 0;
+  border-left: 2px dotted var(--pd-pred);
+}
+.pd-gauge-apex {
+  position: absolute;
+  top: 22px;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  border-radius: 50%;
+  background: var(--pd-apex);
+  box-shadow: 0 0 0 3px var(--mantine-color-body);
+}
+.pd-gauge-tag {
+  position: absolute;
+  top: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pd-gauge-tag-left {
+  transform: translateX(calc(-100% - 4px));
+}
+.pd-gauge-tag-right {
+  transform: translateX(4px);
+}
+.pd-tag-apex {
+  color: var(--pd-apex);
+}
+.pd-tag-pred {
+  color: var(--pd-pred);
+}
+.pd-gauge-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.68rem;
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+/* MS1 isotope bars */
+.pd-iso {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+.pd-iso-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 76px;
+  align-items: center;
+  gap: 8px;
+}
+.pd-iso-name {
+  font-size: 0.7rem;
+  color: var(--mantine-color-dimmed);
+  font-family: var(--mantine-font-family-monospace);
+}
+.pd-iso-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--mantine-color-default-border);
+  overflow: hidden;
+}
+.pd-iso-fill {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--mantine-color-cyan-6);
+}
+.pd-iso-value {
+  font-size: 0.7rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-dimmed);
+}
+
+/* ---------------------------------------------------------------- definition lists */
+.pd-defs {
+  display: grid;
+  margin-top: 6px;
+}
+.pd-def {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--mantine-color-default-border);
+  font-size: 0.8rem;
+}
+.pd-def:last-child {
+  border-bottom: none;
+}
+.pd-def-key {
+  color: var(--mantine-color-dimmed);
+  cursor: help;
+}
+.pd-def-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* ---------------------------------------------------------------- partner, quant */
+.pd-partner-row {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+}
+.pd-big {
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.pd-big-none {
+  font-size: 1.1rem;
+  color: var(--mantine-color-dimmed);
+}
+.pd-wbars {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 6px;
+}
+.pd-wbar {
+  display: grid;
+  grid-template-columns: 92px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.pd-wbar-label {
+  font-size: 0.72rem;
+  color: var(--mantine-color-dimmed);
+}
+.pd-wbar-track {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--mantine-color-default-border);
+}
+.pd-wbar-fill {
+  position: absolute;
+  top: 0;
+  height: 10px;
+  border-radius: 5px;
+  opacity: 0.75;
+}
+.pd-wbar-mark {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 16px;
+  margin-left: -1px;
+  border-radius: 1px;
+}
+.pd-wbar-value {
+  font-size: 0.7rem;
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- footer */
+.pd-footer {
+  color: var(--mantine-color-dimmed);
+  padding: 0 4px 12px;
+}
+
+/* ---------------------------------------------------------------- evidence legend */
+.pd-ev-legend {
+  padding: 2px 4px 0;
+}
+.pd-lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--mantine-color-dimmed);
+}
+.pd-lg-fill {
+  display: inline-block;
+  width: 22px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--mantine-color-indigo-6);
+}
+.pd-lg-mark {
+  display: inline-block;
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--mantine-color-orange-7);
+}
+
+/* ---------------------------------------------------------------- tables */
+.pd-ctable td, .pd-ctable th {
+  white-space: nowrap;
+}
+.pd-ctable tr.pd-this-row td {
+  background: var(--mantine-color-indigo-light);
+}
+.pd-ctable tr.pd-this-row td:first-child {
+  box-shadow: inset 3px 0 0 var(--mantine-color-indigo-6);
+}
+.pd-q-unit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.pd-qgroup {
+  white-space: nowrap;
+}
+.pd-qg {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+}
+.pd-qgv {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+/* A peptidoform of the competition stays on one line (the tooltip has it in full). */
+.pd-cname {
+  max-width: 280px;
+}
+.pd-cpep {
+  display: inline-block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.pd-cname .mv-pep {
+  white-space: nowrap;
+  word-break: normal;
+}
+
+/* ---------------------------------------------------------------- hero layout */
+.pd-hero > :first-child {
+  flex: 1 1 440px;
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- marks */
+.pd-neutral {
+  display: inline-block;
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+}
+.pd-dash {
+  color: var(--mantine-color-dimmed);
+  cursor: help;
+}
+.pd-qcol-tip {
+  cursor: help;
+  min-width: 0;
+}
+.pd-prow {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+}
+.pd-prow-this {
+  box-shadow: inset 3px 0 0 var(--mantine-color-indigo-6);
+  background: var(--mantine-color-indigo-light);
+  border-color: transparent;
+}
+.pd-prow-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.pd-prow-name .mv-pep {
+  word-break: break-all;
+}
+.pd-prow-vals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 22px;
+  margin: 6px 0 0 24px;
+}
+.pd-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.pd-kv-label {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.64rem;
+  color: var(--mantine-color-dimmed);
+}
+.pd-kv-value {
+  font-size: 0.82rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.pd-th-tip {
+  cursor: help;
+  border-bottom: 1px dotted var(--mantine-color-dimmed);
+}
+
+/* ---------------------------------------------------------------- sequence diagram */
+.pd-seq {
+  --pd-seq-w: 21px;
+  --pd-seq-wmin: 13px;
+  --pd-seq-gap: 9px;
+  --pd-seq-gapmin: 4px;
+  --pd-mark-h: 13px;
+  --pd-mark-w: 6px;
+  margin: 2px 0 6px;
+}
+.pd-seq-compact {
+  --pd-seq-w: 14px;
+  --pd-seq-wmin: 9px;
+  --pd-seq-gap: 7px;
+  --pd-seq-gapmin: 3px;
+  --pd-mark-h: 9px;
+  --pd-mark-w: 5px;
+  margin: 0 0 2px;
+}
+.pd-seq-scroll {
+  display: flex;
+  justify-content: safe center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+.pd-seq-grid {
+  display: grid;
+  flex: 1 1 auto;
+  row-gap: 3px;
+  align-items: center;
+  justify-items: center;
+}
+.pd-seq-compact .pd-seq-grid {
+  row-gap: 2px;
+}
+.pd-seq-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+/* The tooltip wrapper of a mark must not be taller than its row (it would cover the
+   mark of the next charge). */
+.pd-seq-slot > div {
+  display: flex;
+  line-height: 0;
+}
+.pd-seq-aa {
+  position: relative;
+  width: 100%;
+  text-align: center;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 1.22rem;
+  font-weight: 700;
+  line-height: 1.25;
+  cursor: default;
+}
+.pd-seq-compact .pd-seq-aa {
+  font-size: 0.86rem;
+  line-height: 1.15;
+}
+.pd-seq-mod {
+  font-weight: 800;
+}
+.pd-seq-tag {
+  position: absolute;
+  left: 50%;
+  bottom: -9px;
+  transform: translateX(-50%);
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+}
+.pd-seq-compact .pd-seq-tag {
+  bottom: -7px;
+  font-size: 0.45rem;
+}
+.pd-mark {
+  display: block;
+  box-sizing: border-box;
+  width: var(--pd-mark-w);
+  height: var(--pd-mark-h);
+  border-radius: 2px;
+  border: 1.5px solid var(--pd-c, var(--mantine-color-blue-6));
+  cursor: pointer;
+  transition: transform 100ms ease, opacity 100ms ease, box-shadow 100ms ease;
+}
+.pd-seq-compact .pd-mark {
+  border-width: 1.2px;
+  border-radius: 1.5px;
+}
+.pd-mark-on {
+  background: var(--pd-c, var(--mantine-color-blue-6));
+}
+.pd-mark-lib {
+  background: transparent;
+}
+.pd-mark-key {
+  --pd-c: var(--mantine-color-blue-6);
+  display: inline-block;
+  cursor: default;
+  vertical-align: -2px;
+}
+.pd-mark.pd-hl {
+  transform: scale(1.45, 1.3);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pd-c) 30%, transparent);
+}
+.pd-mark.pd-dim {
+  opacity: 0.28;
+}
+.pd-mark.pd-off {
+  opacity: 0.18;
+}
+.pd-seq-num {
+  font-size: 0.6rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.55;
+}
+.pd-seq-num-b {
+  color: var(--mantine-color-blue-6);
+}
+.pd-seq-num-y {
+  color: var(--mantine-color-red-6);
+}
+.pd-seq-num-on {
+  opacity: 1;
+  font-weight: 700;
+}
+.pd-seq-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 14px;
+  margin-top: 4px;
+  font-size: 0.7rem;
+  color: var(--mantine-color-dimmed);
+}
+.pd-seq-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.pd-seq-empty {
+  font-size: 0.75rem;
+  color: var(--mantine-color-dimmed);
+  text-align: center;
+  padding: 6px 0;
+}
+
+/* ---------------------------------------------------------------- ion ladder */
+.pd-lad {
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0 auto;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.pd-lad th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 5px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--mantine-color-dimmed);
+  background: var(--mantine-color-body);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  white-space: nowrap;
+}
+.pd-lad td {
+  padding: 3px 8px;
+  text-align: center;
+  white-space: nowrap;
+  border-bottom: 1px solid color-mix(in srgb, var(--mantine-color-default-border) 55%, transparent);
+}
+.pd-lad tbody tr:last-child td {
+  border-bottom: none;
+}
+.pd-lad th.pd-lad-b {
+  color: var(--mantine-color-blue-6);
+}
+.pd-lad th.pd-lad-y {
+  color: var(--mantine-color-red-6);
+}
+.pd-lad .pd-lad-num {
+  width: 26px;
+  font-size: 0.68rem;
+  color: var(--mantine-color-dimmed);
+}
+.pd-lad td.pd-lad-res {
+  width: 30px;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.92rem;
+  font-weight: 800;
+  background: var(--mantine-color-default-hover);
+}
+.pd-lad th.pd-lad-res {
+  width: 30px;
+}
+.pd-lc {
+  min-width: 78px;
+}
+.pd-lc[data-frag] {
+  cursor: pointer;
+  transition: opacity 100ms ease, box-shadow 100ms ease;
+}
+.pd-lc-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.pd-lc-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pd-lc-lib .pd-lc-mz {
+  color: var(--mantine-color-dimmed);
+}
+.pd-lc-on {
+  background: color-mix(in srgb, var(--pd-c) 16%, transparent);
+}
+.pd-lc-on .pd-lc-mz {
+  font-weight: 700;
+}
+.pd-lc-ppm {
+  font-size: 0.66rem;
+  color: var(--mantine-color-dimmed);
+}
+.pd-lc.pd-hl {
+  box-shadow: inset 0 0 0 2px var(--pd-c);
+}
+.pd-lc.pd-dim {
+  opacity: 0.45;
+}
+.pd-lc.pd-off {
+  opacity: 0.3;
+}
+.pd-lc.pd-off .pd-lc-mz {
+  text-decoration: line-through;
+}
+.pd-lad-compact {
+  font-size: 0.7rem;
+}
+.pd-lad-compact th {
+  padding: 3px 4px;
+  font-size: 0.66rem;
+}
+.pd-lad-compact td {
+  padding: 1px 4px;
+}
+/* The compact table has no dot: a matched cell's left edge is the fragment's colour. */
+.pd-lad-compact .pd-lc {
+  min-width: 44px;
+}
+.pd-lad-compact .pd-lc-in {
+  gap: 3px;
+}
+.pd-lad-compact .pd-lc-on {
+  box-shadow: inset 2px 0 0 var(--pd-c);
+}
+.pd-lad-compact .pd-lc.pd-hl {
+  box-shadow: inset 0 0 0 2px var(--pd-c);
+}
+.pd-lad-compact td.pd-lad-res {
+  font-size: 0.78rem;
+  width: 22px;
+}
+.pd-lad-compact .pd-lad-num {
+  width: 18px;
+  font-size: 0.62rem;
+}
+.pd-ladder-wrap {
+  overflow-x: auto;
+}
+.pd-lad-cap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+  color: var(--mantine-color-dimmed);
+}
+.pd-lad-cap-text {
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- preview (identification page) */
+.pv-root {
+  container-type: inline-size;
+}
+/* One line: the identity shrinks first (a long peptidoform ends with an ellipsis; its
+   title has it in full), the q values and the link keep their width. */
+.pv-head {
+  display: flex;
+  align-items: center;
+  gap: 6px 18px;
+  margin-bottom: 8px;
+  min-height: 34px;
+}
+.pv-ident {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+.pv-ident > * {
+  flex: none;
+}
+.pv-ident > .pv-pep {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pv-pep .mv-pep {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pv-qs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 4px 16px;
+}
+.pv-head > .pv-open {
+  flex: none;
+  margin-left: auto;
+}
+.pv-q {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  cursor: help;
+}
+.pv-qtext {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.pv-qc {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.62rem;
+  color: var(--mantine-color-dimmed);
+}
+.pv-qv {
+  font-size: 0.82rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.pv-qg {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+}
+.pv-score {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.15;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+.pv-score .mv-spark-cell {
+  gap: 6px;
+}
+.pv-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 14px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-indigo-filled);
+  color: var(--mantine-color-white);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 120ms ease;
+}
+.pv-open:hover {
+  background: var(--mantine-color-indigo-filled-hover);
+}
+.pv-body {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 5fr) minmax(250px, 3fr);
+  gap: 16px;
+}
+.pv-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.pv-panel + .pv-panel {
+  border-left: 1px solid var(--mantine-color-default-border);
+  padding-left: 14px;
+}
+.pv-cap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 18px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.pv-cap-title {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+.pv-cap-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.7rem;
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+.pv-graph {
+  margin: 0 -4px;
+}
+.pv-ladder-scroll {
+  max-height: 240px;
+  overflow: auto;
+}
+.pv-missing {
+  min-height: 80px;
+  justify-content: center;
+}
+@container (max-width: 1020px) {
+  .pv-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+    gap: 12px;
+  }
+  .pv-panel + .pv-panel {
+    padding-left: 10px;
+  }
+}
+/* A narrow card: the header keeps the marks and the values on one line (the column
+   names are in the tooltips) and the link shrinks to its arrow. */
+@container (max-width: 1000px) {
+  .pv-head {
+    gap: 6px 14px;
+  }
+  .pv-qs {
+    flex-wrap: nowrap;
+    gap: 4px 12px;
+  }
+  .pv-qc {
+    display: none;
+  }
+  .pv-q {
+    gap: 4px;
+  }
+  .pv-open {
+    padding: 0 8px;
+  }
+  .pv-open > span:first-child {
+    display: none;
+  }
+  .pv-score .mv-spark {
+    display: none;
+  }
+}
+@container (max-width: 760px) {
+  /* Too narrow for three panels: the ion table is on the precursor page. */
+  .pv-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .pv-ladder {
+    display: none !important;
+  }
+}
+@container (max-width: 520px) {
+  .pv-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pv-panel + .pv-panel {
+    border-left: none;
+    padding-left: 0;
+  }
+}

@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlencode
 
 if TYPE_CHECKING:
     from mumdia_viewer.data import ResultSet
+    from mumdia_viewer.data.fasta import Fasta
 
 DEFAULT_THRESHOLD = 0.01
 
@@ -61,3 +62,4 @@ class PageContext:
     scheme: str = "light"
     query: dict[str, str] = field(default_factory=dict)
     compare: ResultSet | None = None
+    fasta: Fasta | None = None

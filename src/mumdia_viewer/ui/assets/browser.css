@@ -1,0 +1,1004 @@
+/* mumdia-viewer: the identification page (linked panels in the manner of PeptideShaker). */
+
+/* Grid and bar colours for the AG Grid theme (browser.js mvbTheme), light and dark. */
+:root {
+  --ib-grid-bg: var(--mantine-color-white);
+  --ib-grid-fg: var(--mantine-color-text);
+  --ib-grid-dim: var(--mantine-color-dimmed);
+  --ib-grid-header: var(--mantine-color-gray-0);
+  --ib-grid-header-fg: var(--mantine-color-gray-7);
+  --ib-grid-chrome: var(--mantine-color-gray-0);
+  --ib-grid-border: var(--mantine-color-gray-3);
+  --ib-grid-rowline: var(--mantine-color-gray-1);
+  --ib-grid-hover: rgba(66, 99, 235, 0.05);
+  --ib-grid-selected: rgba(66, 99, 235, 0.13);
+  --ib-grid-accent: var(--mantine-color-indigo-6);
+  --ib-grid-active: rgba(66, 99, 235, 0.035);
+  --ib-tip-bg: var(--mantine-color-gray-9);
+  --ib-tip-fg: var(--mantine-color-white);
+  --ib-chip-bg: var(--mantine-color-gray-1);
+  --ib-bar-pass: var(--mantine-color-green-6);
+  --ib-bar-fail: var(--mantine-color-gray-4);
+  --ib-bar-score: var(--mantine-color-grape-5);
+  --ib-bar-peptide: var(--mantine-color-teal-6);
+  --ib-bar-precursor: var(--mantine-color-violet-5);
+  --ib-bar-runs: var(--mantine-color-blue-5);
+  --ib-bar-quantity: var(--mantine-color-cyan-6);
+  --ib-bar-anyq: var(--mantine-color-gray-5);
+  --ib-rule-bg: var(--mantine-color-yellow-light);
+  --ib-rule-fg: var(--mantine-color-yellow-light-color);
+}
+[data-mantine-color-scheme="dark"] {
+  --ib-grid-bg: var(--mantine-color-dark-6);
+  --ib-grid-fg: var(--mantine-color-dark-0);
+  --ib-grid-dim: var(--mantine-color-dark-2);
+  --ib-grid-header: var(--mantine-color-dark-7);
+  --ib-grid-header-fg: var(--mantine-color-dark-1);
+  --ib-grid-chrome: var(--mantine-color-dark-7);
+  --ib-grid-border: var(--mantine-color-dark-4);
+  --ib-grid-rowline: var(--mantine-color-dark-5);
+  --ib-grid-hover: rgba(116, 143, 252, 0.08);
+  --ib-grid-selected: rgba(116, 143, 252, 0.22);
+  --ib-grid-accent: var(--mantine-color-indigo-4);
+  --ib-grid-active: rgba(116, 143, 252, 0.05);
+  --ib-tip-bg: var(--mantine-color-gray-2);
+  --ib-tip-fg: var(--mantine-color-black);
+  --ib-chip-bg: var(--mantine-color-dark-5);
+  --ib-bar-pass: var(--mantine-color-green-5);
+  --ib-bar-fail: var(--mantine-color-dark-3);
+  --ib-bar-score: var(--mantine-color-grape-4);
+  --ib-bar-peptide: var(--mantine-color-teal-5);
+  --ib-bar-precursor: var(--mantine-color-violet-4);
+  --ib-bar-runs: var(--mantine-color-blue-4);
+  --ib-bar-quantity: var(--mantine-color-cyan-5);
+  --ib-bar-anyq: var(--mantine-color-dark-2);
+}
+
+/* Page: it fills the window like a desktop application; below about 800 px of
+   height it scrolls, and each panel keeps its minimum height. */
+.ib-root {
+  --ib-gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ib-gap);
+  height: calc(100dvh - var(--app-shell-header-height, 62px) - 2 * var(--app-shell-padding, 20px));
+  min-height: 760px;
+}
+.ib-hidden {
+  display: none !important;
+}
+.ib-mono {
+  font-family: var(--mantine-font-family-monospace);
+}
+
+/* Toolbar: one compact row. The chips scroll sideways in the room between the decoy
+   switch and Reset (a fade marks more), so the row never wraps. */
+.ib-toolbar {
+  flex: none;
+  overflow: visible;
+}
+.ib-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.ib-tools > * {
+  flex: none;
+}
+.ib-search {
+  flex: 0 1 260px;
+  min-width: 120px;
+}
+.ib-tools > .ib-chips-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
+}
+.ib-chips-wrap:has(.ib-chips:empty) {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.ib-filters-btn .mantine-Button-label {
+  gap: 6px;
+}
+.ib-nfilters {
+  margin-left: 2px;
+}
+.ib-filters-dropdown .mantine-InputWrapper-label {
+  margin-bottom: 2px;
+}
+.ib-t {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-indigo-light);
+  color: var(--mantine-color-indigo-light-color);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ib-t:hover {
+  background: var(--mantine-color-indigo-light-hover);
+}
+.ib-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-right: 22px;
+}
+.ib-chips::-webkit-scrollbar {
+  display: none;
+}
+.ib-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px 0 10px;
+  border: 0;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 100ms ease;
+}
+.ib-chip-text {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ib-fast-note {
+  line-height: 1.4;
+}
+.ib-chip .mv-icon {
+  opacity: 0.75;
+}
+.ib-chip:hover .mv-icon {
+  opacity: 1;
+}
+.ib-chip-indigo {
+  background: var(--mantine-color-indigo-light);
+  color: var(--mantine-color-indigo-light-color);
+}
+.ib-chip-indigo:hover {
+  background: var(--mantine-color-indigo-light-hover);
+}
+.ib-chip-orange {
+  background: var(--mantine-color-orange-light);
+  color: var(--mantine-color-orange-light-color);
+}
+.ib-chip-orange:hover {
+  background: var(--mantine-color-orange-light-hover);
+}
+.ib-chip:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+.ib-tools-end {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+@media (max-width: 1360px) {
+  .ib-keys {
+    display: none;
+  }
+}
+/* With filter chips the row needs the room of the keyboard hint (and some of the
+   search box's). */
+.ib-tools:has(.ib-chip) .ib-keys {
+  display: none;
+}
+.ib-tools:has(.ib-chip) .ib-search {
+  flex-basis: 170px;
+}
+
+/* A one-line notice above the panels (a link that names a row this table lacks). */
+.ib-notice {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 10px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-orange-light);
+  color: var(--mantine-color-text);
+  font-size: 12.5px;
+}
+.ib-notice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ib-notice-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.ib-notice-close:hover {
+  background: var(--mantine-color-orange-light-hover);
+}
+
+/* The linked panels */
+.ib-panels {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  gap: var(--ib-gap);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.ib-panels[data-level="protein_group"] {
+  grid-template-areas: "top top" "pep pre" "prev prev";
+  grid-template-rows: minmax(196px, 1.15fr) minmax(170px, 1fr) auto;
+}
+.ib-panels[data-level="peptide"] {
+  grid-template-areas: "top top" "pre pre" "prev prev";
+  grid-template-rows: minmax(210px, 1.45fr) minmax(150px, 1fr) auto;
+}
+.ib-panels[data-level="precursor"] {
+  grid-template-areas: "top top" "prev prev";
+  grid-template-rows: minmax(260px, 1fr) auto;
+}
+.ib-panel-top {
+  grid-area: top;
+}
+.ib-panel-pep {
+  grid-area: pep;
+}
+.ib-panel-pre {
+  grid-area: pre;
+}
+.ib-panel-prev {
+  grid-area: prev;
+}
+.ib-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ib-panel > .mantine-Card-root {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* The title bar of a panel (the header of widgets.section). */
+.ib-panel > .mantine-Card-root > :first-child {
+  --group-align: center;
+  padding: 4px 10px 4px 12px;
+  margin: 0 !important;
+  flex: none;
+  min-height: 32px;
+  flex-wrap: nowrap;
+}
+.ib-pright {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-width: 0;
+  white-space: nowrap;
+}
+.ib-note {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ib-countbox {
+  display: inline-flex;
+  flex: none;
+}
+.ib-locate {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--mantine-color-indigo-light);
+  border-radius: 999px;
+  background: var(--mantine-color-indigo-light);
+  color: var(--mantine-color-indigo-light-color);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ib-locate::after {
+  content: "Show selected row";
+}
+.ib-locate:hover {
+  background: var(--mantine-color-indigo-light-hover);
+}
+.ib-panel > .mantine-Card-root > .mantine-Group-root > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.ib-ptitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.ib-ptitle-text {
+  flex: none;
+}
+.ib-subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--mantine-color-text);
+}
+.ib-subject-seq {
+  font-family: var(--mantine-font-family-monospace);
+  letter-spacing: 0.02em;
+}
+.ib-count {
+  flex: none;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  transition: opacity 120ms ease;
+}
+.ib-count.ib-stale {
+  opacity: 0.35;
+}
+.ib-qchip {
+  flex: none;
+  letter-spacing: 0;
+}
+.ib-range {
+  white-space: nowrap;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+.ib-gridbox {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  border-top: 1px solid var(--ib-grid-border);
+}
+.ib-gridbox > .ib-grid {
+  position: absolute;
+  inset: 0;
+}
+/* A child panel waits for its rows: dimmed, not clickable, a moving line on top. */
+.ib-panel.ib-loading .ib-gridbox > .ib-grid {
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity 120ms ease 80ms;
+}
+.ib-panel.ib-loading .ag-overlay-no-rows-wrapper {
+  visibility: hidden;
+}
+.ib-panel.ib-loading .ib-gridbox::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 0;
+  height: 2px;
+  width: 28%;
+  background: var(--ib-grid-accent);
+  border-radius: 2px;
+  z-index: 6;
+  animation: ib-progress 900ms ease-in-out infinite;
+}
+@keyframes ib-progress {
+  0% {
+    left: 0;
+  }
+  50% {
+    left: 72%;
+  }
+  100% {
+    left: 0;
+  }
+}
+.ib-empty {
+  position: absolute;
+  inset: 29px 0 0 0;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 24px 16px;
+  background: var(--ib-grid-bg);
+  z-index: 3;
+  overflow: auto;
+}
+.ib-empty-on {
+  display: flex;
+}
+.ib-empty-sub {
+  line-height: 1.5;
+  word-break: break-word;
+}
+/* The data layer's longer note: three lines, then "more". */
+.ib-clamp {
+  max-width: 760px;
+  text-align: center;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  line-height: 1.5;
+}
+.ib-clamp-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  word-break: break-word;
+}
+.ib-clamp-open .ib-clamp-text {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+.ib-clamp-more {
+  margin-top: 2px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--mantine-color-anchor);
+  font-family: inherit;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Info tooltips: one plain line, then the details in smaller print. */
+.ib-help {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  line-height: 1.45;
+}
+.ib-help-line {
+  font-weight: 600;
+}
+.ib-help-small {
+  font-size: 11px;
+  opacity: 0.82;
+}
+.ib-overlay {
+  color: var(--ib-grid-dim);
+  font-size: 12.5px;
+}
+
+/* The preview of the selected precursor (ui.detail.preview, a card of its own). While
+   the next card is on its way, the shown one is dimmed under a moving line. */
+.ib-panel-prev {
+  position: relative;
+}
+.ib-panel-prev #ib-preview {
+  min-width: 0;
+  transition: opacity 120ms ease;
+}
+.ib-panel-prev.ib-loading #ib-preview {
+  opacity: 0.55;
+  transition: opacity 120ms ease 150ms;
+}
+.ib-panel-prev.ib-loading::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 0;
+  height: 2px;
+  width: 28%;
+  background: var(--ib-grid-accent);
+  border-radius: 2px;
+  z-index: 6;
+  animation: ib-progress 900ms ease-in-out infinite;
+}
+.ib-preview-wait {
+  height: 318px;
+}
+html[data-ib-preview="collapsed"] .ib-preview-wait {
+  height: 52px;
+}
+.ib-preview-empty {
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ib-preview-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 12px 16px;
+  border-radius: var(--mantine-radius-lg);
+  background: var(--mantine-color-body);
+  box-shadow: var(--mantine-shadow-sm);
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-sm);
+}
+/* The handle that hides the preview's figures and tables (the header line stays). It
+   sits in the gap above the preview, like the arrows of a split pane. */
+.ib-pv-toggle {
+  position: absolute;
+  top: calc(-1 * var(--ib-gap) / 2 - 9px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 18px;
+  padding: 0 10px 0 8px;
+  border: 1px solid var(--ib-grid-border);
+  border-radius: 999px;
+  background: var(--mantine-color-body);
+  color: var(--mantine-color-dimmed);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--mantine-shadow-xs);
+}
+.ib-pv-toggle:hover {
+  color: var(--mantine-color-text);
+  border-color: var(--ib-grid-accent);
+}
+.ib-pv-toggle:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+.ib-pvt-icon {
+  width: 9px;
+  height: 9px;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+  transition: transform 120ms ease;
+}
+.ib-pvt-show {
+  display: none;
+}
+html[data-ib-preview="collapsed"] .ib-pvt-show {
+  display: inline;
+}
+html[data-ib-preview="collapsed"] .ib-pvt-hide {
+  display: none;
+}
+html[data-ib-preview="collapsed"] .ib-pvt-icon {
+  transform: rotate(180deg);
+}
+.ib-preview-placeholder .ib-pv-note {
+  padding: 18px 0 6px;
+}
+
+/* Cells */
+.ib-grid .ag-cell {
+  display: flex;
+  align-items: center;
+}
+.ib-grid .ag-right-aligned-cell {
+  justify-content: flex-end;
+}
+.ib-grid .ag-row {
+  cursor: pointer;
+}
+.ib-grid .ag-header-cell-text {
+  font-size: 11.5px;
+}
+.ib-grid .ib-cell-valid {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+.ib-grid .ib-head-valid .ag-header-cell-label {
+  justify-content: center;
+}
+.ib-grid .ib-head-valid .ag-header-cell-label::before {
+  content: "";
+  width: 13px;
+  height: 13px;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m5%2012.5%204.5%204.5L19%207.5%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m5%2012.5%204.5%204.5L19%207.5%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+}
+/* A viewer-derived column (species): a dotted underline and a small "rule" mark. */
+.ib-grid .ib-head-derived .ag-header-cell-text {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.ib-grid .ib-head-derived .ag-header-cell-label::after {
+  content: "rule";
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--ib-rule-bg, var(--mantine-color-yellow-light));
+  color: var(--ib-rule-fg, var(--mantine-color-yellow-light-color));
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 15px;
+}
+/* A count at any q (no q filter): said under the header text, and its bar is grey. */
+.ib-grid .ib-head-anyq .ag-header-cell-label {
+  flex-wrap: wrap;
+  align-content: center;
+  row-gap: 0;
+}
+.ib-grid .ib-head-anyq .ag-header-cell-text {
+  line-height: 13px;
+}
+.ib-grid .ib-head-anyq .ag-header-cell-label::after {
+  content: "any q";
+  flex-basis: 100%;
+  color: var(--ib-grid-dim);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 11px;
+  white-space: nowrap;
+}
+.ib-grid .ib-head-anyq.ag-right-aligned-header .ag-header-cell-label::after {
+  text-align: right;
+}
+/* A missing quantity names its quant state (never 0). */
+.ib-noquant {
+  color: var(--ib-grid-dim);
+  font-size: 11px;
+  font-style: italic;
+  white-space: nowrap;
+}
+.ib-grid .ib-cell-active {
+  background-color: var(--ib-grid-active);
+}
+.ib-grid .ib-head-active {
+  color: var(--ib-grid-accent);
+}
+.ib-grid .ib-cell-open {
+  padding-left: 6px;
+  padding-right: 4px;
+}
+/* The selected row: tinted, with an accent bar at its left edge. */
+.ib-grid .ag-pinned-left-cols-container .ag-row-selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--ib-grid-accent);
+  z-index: 2;
+}
+.ib-grid .ag-row-selected .ib-member-first,
+.ib-grid .ag-row-selected .mv-pep {
+  color: var(--mantine-color-indigo-8);
+}
+[data-mantine-color-scheme="dark"] .ib-grid .ag-row-selected .ib-member-first,
+[data-mantine-color-scheme="dark"] .ib-grid .ag-row-selected .mv-pep {
+  color: var(--mantine-color-indigo-2);
+}
+/* A match-between-runs transfer: a lime ring around its validation mark. */
+.ib-grid .ib-row-transfer .mv-valid {
+  box-shadow: 0 0 0 2px var(--mantine-color-lime-5);
+}
+/* In-cell bars: the values take a fixed width, so the bars line up down a column. */
+.ib-grid .mv-spark-cell {
+  gap: 6px;
+}
+.ib-grid .ib-cell-bar .mv-spark-text {
+  text-align: right;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 11.5px;
+}
+.ib-grid .ib-bar-q .mv-spark-text {
+  min-width: 50px;
+}
+.ib-grid .ib-bar-score .mv-spark-text {
+  min-width: 44px;
+}
+.ib-grid .ib-bar-quantity .mv-spark-text {
+  min-width: 46px;
+}
+.ib-grid .ib-bar-count .mv-spark-text {
+  min-width: 24px;
+}
+.ib-grid .mv-spark {
+  height: 7px;
+}
+.ib-pep {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+  font-size: 12.5px;
+}
+.ib-text {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ib-num {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.ib-charge {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.ib-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ib-member-first {
+  font-weight: 700;
+  font-size: 12.5px;
+  flex: none;
+}
+.ib-member {
+  flex: none;
+  font-size: 11px;
+  line-height: 18px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--ib-chip-bg);
+  color: var(--ib-grid-dim);
+}
+.ib-member-more {
+  font-weight: 700;
+  color: var(--ib-grid-fg);
+}
+.ib-species {
+  display: inline-flex;
+  gap: 3px;
+}
+.ib-sp {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  letter-spacing: 0.03em;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--mantine-color-gray-light);
+  color: var(--mantine-color-gray-light-color);
+}
+.ib-sp-indigo {
+  background: var(--mantine-color-indigo-light);
+  color: var(--mantine-color-indigo-light-color);
+}
+.ib-sp-yellow {
+  background: var(--mantine-color-yellow-light);
+  color: var(--mantine-color-yellow-light-color);
+}
+.ib-sp-teal {
+  background: var(--mantine-color-teal-light);
+  color: var(--mantine-color-teal-light-color);
+}
+.ib-sp-pink {
+  background: var(--mantine-color-pink-light);
+  color: var(--mantine-color-pink-light-color);
+}
+.ib-sp-grape {
+  background: var(--mantine-color-grape-light);
+  color: var(--mantine-color-grape-light-color);
+}
+.ib-sp-orange {
+  background: var(--mantine-color-orange-light);
+  color: var(--mantine-color-orange-light-color);
+}
+.ib-sp-lime {
+  background: var(--mantine-color-lime-light);
+  color: var(--mantine-color-lime-light-color);
+}
+.ib-sp-cyan {
+  background: var(--mantine-color-cyan-light);
+  color: var(--mantine-color-cyan-light-color);
+}
+.ib-sp-violet {
+  background: var(--mantine-color-violet-light);
+  color: var(--mantine-color-violet-light-color);
+}
+.ib-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+.ib-pill-target {
+  background: var(--mantine-color-indigo-light);
+  color: var(--mantine-color-indigo-light-color);
+}
+.ib-pill-decoy {
+  background: var(--mantine-color-orange-light);
+  color: var(--mantine-color-orange-light-color);
+}
+.ib-pill-lime {
+  background: var(--mantine-color-lime-light);
+  color: var(--mantine-color-lime-light-color);
+}
+.ib-pill-grape {
+  background: var(--mantine-color-grape-light);
+  color: var(--mantine-color-grape-light-color);
+}
+.ib-pill-gray {
+  background: var(--mantine-color-gray-light);
+  color: var(--mantine-color-gray-light-color);
+}
+.ib-run {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid var(--ib-grid-border);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 11px;
+}
+.ib-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.ib-dot {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mantine-color-gray-5);
+}
+.ib-dot-quantified {
+  background: var(--mantine-color-green-6);
+}
+.ib-dot-not_quantifiable {
+  background: var(--mantine-color-orange-6);
+}
+.ib-dot-not_selected {
+  background: var(--mantine-color-gray-5);
+}
+.ib-dim {
+  color: var(--ib-grid-dim);
+  font-size: 12px;
+}
+.ib-yes {
+  color: var(--mantine-color-green-7);
+  font-weight: 600;
+  font-size: 12px;
+}
+.ib-no {
+  color: var(--mantine-color-orange-7);
+  font-weight: 600;
+  font-size: 12px;
+}
+[data-mantine-color-scheme="dark"] .ib-yes {
+  color: var(--mantine-color-green-4);
+}
+[data-mantine-color-scheme="dark"] .ib-no {
+  color: var(--mantine-color-orange-4);
+}
+.ib-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--ib-grid-dim);
+  transition: background-color 100ms ease, color 100ms ease;
+}
+.ib-open:hover,
+.ib-grid .ag-row-selected .ib-open {
+  color: var(--mantine-color-indigo-light-color);
+}
+.ib-open:hover {
+  background: var(--mantine-color-indigo-light);
+}
+.ib-open-icon {
+  width: 14px;
+  height: 14px;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M14%204h6v6M20%204l-9%209%22%2F%3E%3Cpath%20d%3D%22M18%2014v5a1%201%200%200%201-1%201H5a1%201%200%200%201-1-1V7a1%201%200%200%201%201-1h5%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M14%204h6v6M20%204l-9%209%22%2F%3E%3Cpath%20d%3D%22M18%2014v5a1%201%200%200%201-1%201H5a1%201%200%200%201-1-1V7a1%201%200%200%201%201-1h5%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+}
+.ib-skel {
+  display: inline-block;
+  width: 72%;
+  height: 9px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--ib-grid-rowline), var(--ib-grid-border), var(--ib-grid-rowline));
+  background-size: 200% 100%;
+  animation: ib-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes ib-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+/* AG Grid tooltips: wrapped, like the Mantine ones. */
+.ib-grid .ag-tooltip {
+  max-width: 380px;
+  white-space: normal;
+  line-height: 1.45;
+  font-size: 12px;
+  padding: 7px 10px;
+  border-radius: var(--mantine-radius-sm);
+  box-shadow: var(--mantine-shadow-md);
+}
+
+/* Narrow windows: the panels stack and the page scrolls. */
+@media (max-width: 1279px) {
+  .ib-unit .mv-icon {
+    /* the icon's own style sets display */
+    display: none !important;
+  }
+  .ib-search {
+    flex-basis: 130px;
+    min-width: 120px;
+  }
+  .ib-reset .mantine-Button-label {
+    display: none;
+  }
+  .ib-reset .mantine-Button-section {
+    margin: 0;
+  }
+  .ib-root {
+    height: auto;
+    min-height: 0;
+  }
+  .ib-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ib-panels[data-level="protein_group"] {
+    grid-template-areas: "top" "pep" "pre" "prev";
+    grid-template-rows: 300px 290px 210px auto;
+  }
+  .ib-panels[data-level="peptide"] {
+    grid-template-areas: "top" "pre" "prev";
+    grid-template-rows: 360px 230px auto;
+  }
+  .ib-panels[data-level="precursor"] {
+    grid-template-areas: "top" "prev";
+    grid-template-rows: 420px auto;
+  }
+}

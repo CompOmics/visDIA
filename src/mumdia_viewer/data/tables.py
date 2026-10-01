@@ -120,7 +120,9 @@ class TableQuery:
     ``run_psm_q``. ``threshold=None`` applies no q filter. ``protein`` is a
     case-insensitive substring of the protein string; ``modification`` a case-sensitive
     substring of the peptidoform (for example ``Oxidation``); ``search`` a
-    case-insensitive substring of the peptidoform or the protein. ``quant_status`` is a
+    case-insensitive substring of the peptidoform or the protein. ``protein_group`` and
+    ``base_peptide_id`` are exact matches, for linked tables (the peptides of one protein
+    group, the precursors of one peptide). ``quant_status`` is a
     quant state (``quantified``, ``not_quantifiable``, ``not_selected``) or a raw
     ``quant_status`` string. ``run`` (experiments) is a run name or ``source`` index.
     In the peptide and protein-group tables every filter selects scored rows, and a
@@ -133,6 +135,8 @@ class TableQuery:
     include_decoys: bool = False
     charge: int | None = None
     protein: str | None = None
+    protein_group: str | None = None
+    base_peptide_id: int | None = None
     modification: str | None = None
     quant_status: str | None = None
     search: str | None = None
@@ -457,6 +461,10 @@ def _validate(rs: ResultSet, query: TableQuery) -> _Context:
         raise ViewerError(f"limit must be an integer from 0 to {MAX_LIMIT}.")
     if query.charge is not None and not _is_int(query.charge):
         raise ViewerError("charge must be an integer.")
+    if query.base_peptide_id is not None and not _is_int(query.base_peptide_id):
+        raise ViewerError("base_peptide_id must be an integer.")
+    if query.protein_group is not None and not isinstance(query.protein_group, str):
+        raise ViewerError("protein_group must be a string (an exact protein group).")
     info = rescore_info(rs)
     base_peptide = None
     if not precursor_q_is_precursor_unit(info):
@@ -574,7 +582,12 @@ def _gate_sentence(ctx: _Context) -> str | None:
         parts = [f"run {run.label}: {gate.describe(ctx.experiment)}" for run, gate in gates]
         text = "Quant columns: peptide_quant holds, per run, " + "; ".join(parts) + "."
         columns = {g.q_column for g in distinct.values()}
-    if ctx.q_column is not None and None not in columns and ctx.q_column not in columns:
+    if (
+        ctx.query.threshold is not None
+        and ctx.q_column is not None
+        and None not in columns
+        and ctx.q_column not in columns
+    ):
         gate_cols = ", ".join(sorted(str(c) for c in columns))
         text += (
             f" The q filter of this table ({ctx.q_column}) is not the quant gate column "
@@ -783,6 +796,12 @@ def _filters(ctx: _Context, columns: list[str]) -> tuple[SqlFragment, list[str]]
     if protein is not None:
         conds.append(SqlFragment("contains(lower(x.protein), lower(?))", protein))
         words.append(f"protein contains {protein!r} (case-insensitive)")
+    if q.protein_group is not None:
+        conds.append(SqlFragment("x.protein_group = ?", q.protein_group))
+        words.append(f"protein group {q.protein_group!r}")
+    if q.base_peptide_id is not None:
+        conds.append(SqlFragment("x.base_peptide_id = ?", int(q.base_peptide_id)))
+        words.append(f"base_peptide_id {int(q.base_peptide_id)}")
     mod = _clean_text(q.modification)
     if mod is not None:
         conds.append(SqlFragment("contains(x.peptidoform, ?)", mod))

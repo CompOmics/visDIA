@@ -234,6 +234,10 @@ class Brute:
             df = df[df["charge"] == query.charge]
         if query.protein:
             df = df[df["protein"].str.lower().str.contains(query.protein.lower(), regex=False)]
+        if query.protein_group is not None:
+            df = df[df["protein_group"] == query.protein_group]
+        if query.base_peptide_id is not None:
+            df = df[df["base_peptide_id"] == query.base_peptide_id]
         if query.modification:
             df = df[df["peptidoform"].str.contains(query.modification, regex=False)]
         if query.search:
@@ -311,6 +315,18 @@ def _queries(rs, unit: str) -> list[TableQuery]:
         TableQuery(unit=unit, q_column="run_psm_q", threshold=0.004),
         TableQuery(unit=unit, q_column="precursor_q", threshold=0.02),
         TableQuery(unit=unit, q_column="global_q_value", include_decoys=True),
+    ]
+    # The exact filters of the linked tables: the largest protein group and base peptide.
+    keys = pq.read_table(rs.scored.path, columns=["protein_group", "base_peptide_id"]).to_pandas()
+    group = str(keys["protein_group"].value_counts().idxmax())
+    peptide = int(keys["base_peptide_id"].value_counts().idxmax())
+    base += [
+        TableQuery(unit=unit, protein_group=group, threshold=None),
+        TableQuery(unit=unit, protein_group=group, threshold=0.05, include_decoys=True),
+        TableQuery(unit=unit, base_peptide_id=peptide, threshold=None, include_decoys=True),
+        TableQuery(unit=unit, base_peptide_id=peptide, q_column="run_psm_q", threshold=None),
+        TableQuery(unit=unit, protein_group=group, base_peptide_id=peptide, threshold=None),
+        TableQuery(unit=unit, protein_group="no such group", threshold=None),
     ]
     columns = list(identification_table(rs, TableQuery(unit=unit, limit=1)).rows.columns)
     sortable = [
@@ -859,6 +875,10 @@ def test_validation_errors(open_fixture):
         identification_table(rs, TableQuery(offset=-3))
     with pytest.raises(ViewerError, match="NaN"):
         identification_table(rs, TableQuery(threshold=float("nan")))
+    with pytest.raises(ViewerError, match="base_peptide_id must be an integer"):
+        identification_table(rs, TableQuery(base_peptide_id="12"))  # type: ignore[arg-type]
+    with pytest.raises(ViewerError, match="protein_group must be a string"):
+        identification_table(rs, TableQuery(protein_group=3))  # type: ignore[arg-type]
     # A run filter of 0 or '' on a single run is accepted.
     assert identification_table(rs, TableQuery(run=0)).total == 273
 

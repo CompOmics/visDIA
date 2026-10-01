@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ from dash import (
 
 from mumdia_viewer import __version__
 from mumdia_viewer.data import ResultSet
+from mumdia_viewer.data.fasta import Fasta
 
 from . import browser, detail, overview
 from .icons import icon
@@ -34,12 +36,34 @@ from .state import (
     query_of,
     threshold_options,
 )
-from .theme import MANTINE_THEME
+from .theme import MANTINE_THEME, browser_globals
 from .widgets import notice_list, peptidoform
 
 ASSETS = Path(__file__).parent / "assets"
 RECENT_MAX = 8
 PAGES = {"overview": overview, "identifications": browser, "precursor": detail}
+
+
+# The page skeleton: Dash's default plus window.MV, the constants the browser code
+# needs (theme.browser_globals), written before any script runs.
+INDEX = """<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <script>window.MV = __MV__;</script>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>"""
 
 
 def _templates() -> dict[str, Any]:
@@ -151,6 +175,7 @@ def _header(rs: ResultSet, base: str) -> Any:
         radius="xl",
         size="sm",
         n_submit=0,
+        debounce=True,
         visibleFrom="md",
     )
     return dmc.AppShellHeader(
@@ -266,8 +291,18 @@ def _recent_links(recent: list[dict[str, Any]] | None, base: str) -> Any:
 # --------------------------------------------------------------------------- app
 
 
-def create_app(rs: ResultSet, *, compare: ResultSet | None = None, url_base: str = "/") -> Dash:
-    """Build the app for one result set (``compare`` is kept for the compare view)."""
+def create_app(
+    rs: ResultSet,
+    *,
+    compare: ResultSet | None = None,
+    url_base: str = "/",
+    fasta: Fasta | None = None,
+) -> Dash:
+    """Build the app for one result set.
+
+    ``compare`` is kept for the compare view; ``fasta`` gives the protein sequences of
+    the coverage views (none: the views say how to add a FASTA).
+    """
     app = Dash(
         __name__,
         url_base_pathname=url_base,
@@ -276,7 +311,9 @@ def create_app(rs: ResultSet, *, compare: ResultSet | None = None, url_base: str
         title=f"{rs.root.name} | MuMDIA viewer",
         update_title=None,
     )
-    state = {"rs": rs, "compare": compare}
+    app.index_string = INDEX.replace("__MV__", json.dumps(browser_globals()))
+    state = {"rs": rs, "compare": compare, "fasta": fasta}
+    app.mv_fasta = lambda: state["fasta"]  # type: ignore[attr-defined]
 
     def get_rs() -> ResultSet:
         return state["rs"]
@@ -312,7 +349,10 @@ def create_app(rs: ResultSet, *, compare: ResultSet | None = None, url_base: str
     )
     app.layout = dmc.MantineProvider(
         [
-            dcc.Location(id="url"),
+            # A url.href output navigates inside the app. With refresh=True the
+            # Location also wrote its stale search back after a page rewrote the
+            # address with history.replaceState, and the stale address won.
+            dcc.Location(id="url", refresh="callback-nav"),
             dcc.Store(id="threshold", data=DEFAULT_THRESHOLD),
             dcc.Store(id="scheme", storage_type="local"),
             dcc.Store(id="templates", data=_templates()),
@@ -383,6 +423,7 @@ def create_app(rs: ResultSet, *, compare: ResultSet | None = None, url_base: str
             scheme="dark" if scheme == "dark" else "light",
             query=query_of(search),
             compare=state["compare"],
+            fasta=state["fasta"],
         )
         module = PAGES[page]
         content = module.layout(ctx)

@@ -6,6 +6,7 @@ import contextlib
 import math
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
 
@@ -13,9 +14,7 @@ import dash_mantine_components as dmc
 from dash import dcc, html
 
 from .icons import icon
-from .theme import GRAPH_CONFIG, UNIT_MANTINE
-
-_MOD = re.compile(r"(\[[^\]]*\]|\([^)]*\))")
+from .theme import GRAPH_CONFIG, UNIT_MANTINE, mod_name, mod_style
 
 
 def fmt(value: Any, *, digits: int = 4) -> str:
@@ -39,7 +38,13 @@ def fmt(value: Any, *, digits: int = 4) -> str:
     return str(value)
 
 
-def fmt_q(value: Any) -> str:
+def fmt_q(value: Any, threshold: float | None = None) -> str:
+    """A q value in the grid's form: four decimals from 0.001, else ``3.80e-5``.
+
+    A value that differs from ``threshold`` but would read as it (0.010003 as 0.0100 at
+    q <= 0.01) gets more digits until it does not, so a printed value never contradicts
+    its pass or fail mark.
+    """
     if value is None:
         return ""
     v = float(value)
@@ -47,26 +52,218 @@ def fmt_q(value: Any) -> str:
         return ""
     if v == 0:
         return "0"
-    return f"{v:.2e}" if v < 0.001 else f"{v:.4f}"
+
+    def form(extra: int) -> str:
+        if v < 0.001:
+            mantissa, _, exponent = f"{v:.{2 + extra}e}".partition("e")
+            return f"{mantissa}e{int(exponent)}"
+        return f"{v:.{4 + extra}f}"
+
+    text = form(0)
+    if threshold is None or v == threshold:
+        return text
+    for extra in range(1, 14):
+        shown = float(text)
+        if shown != threshold and (shown <= threshold) == (v <= threshold):
+            return text
+        text = form(extra)
+    return repr(v)
+
+
+@dataclass(frozen=True)
+class Residue:
+    aa: str
+    mods: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Peptidoform:
+    """A ProForma-lite peptidoform split into residues and their modifications."""
+
+    decoy: bool
+    residues: tuple[Residue, ...]
+    nterm: tuple[str, ...] = ()
+    cterm: tuple[str, ...] = ()
+
+    @property
+    def sequence(self) -> str:
+        return "".join(r.aa for r in self.residues)
+
+
+_TAG = re.compile(r"\[([^\]]*)\]|\(([^)]*)\)")
+_CTERM = re.compile(r"-((?:\[[^\]]*\]|\([^)]*\))+)$")
+
+
+def parse_peptidoform(text: str | None) -> Peptidoform:
+    """Split ``[Acetyl]-PEM[Oxidation]TIDE-[Amidated]`` (or ``M(Oxidation)``) into residues.
+
+    A tag after a residue modifies that residue; tags before ``-`` at the start are
+    N-terminal, tags after ``-`` at the end C-terminal. Any other character is kept as a
+    residue, so nothing of the text is lost.
+    """
+    rest = text or ""
+    decoy = rest.startswith("DECOY_")
+    if decoy:
+        rest = rest[len("DECOY_") :]
+    nterm: list[str] = []
+    while True:
+        m = _TAG.match(rest)
+        if m is None or not rest[m.end() :].startswith("-"):
+            break
+        nterm.append(m.group(1) if m.group(1) is not None else m.group(2))
+        rest = rest[m.end() + 1 :]
+    cterm: list[str] = []
+    cm = _CTERM.search(rest)
+    if cm is not None:
+        cterm = [a or b for a, b in _TAG.findall(cm.group(1))]
+        rest = rest[: cm.start()]
+    residues: list[Residue] = []
+    pos = 0
+    while pos < len(rest):
+        m = _TAG.match(rest, pos)
+        if m is not None:
+            tag = m.group(1) if m.group(1) is not None else m.group(2)
+            if residues:
+                last = residues[-1]
+                residues[-1] = Residue(last.aa, (*last.mods, tag))
+            else:
+                nterm.append(tag)
+            pos = m.end()
+            continue
+        residues.append(Residue(rest[pos]))
+        pos += 1
+    return Peptidoform(decoy, tuple(residues), tuple(nterm), tuple(cterm))
+
+
+def _mod_span(label: str, mods: tuple[str, ...]) -> html.Span:
+    styles = [mod_style(m) for m in mods]
+    names = ", ".join(mod_name(m) for m in mods)
+    return html.Span(
+        [label, html.Sup("+".join(t for t, _ in styles), className="mv-pep-tag")],
+        className="mv-pep-modres",
+        style={"color": styles[0][1]},
+        title=names if label in ("n", "c") else f"{label}: {names}",
+    )
 
 
 def peptidoform(text: str | None, *, size: str = "1em") -> html.Span:
-    """A ProForma-lite peptidoform with modifications as superscripts."""
+    """A peptidoform as PeptideShaker draws it: modified residues coloured and tagged.
+
+    The tag is a short form of the modification (``ox``, ``cam``, ``ph``); the tooltip of
+    the residue names it in full, the tooltip of the whole gives the text as written.
+    ``DECOY_`` is shown in the decoy colour.
+    """
     if not text:
         return html.Span("")
+    pf = parse_peptidoform(text)
     parts: list = []
-    rest = text
-    if rest.startswith("DECOY_"):
+    if pf.decoy:
         parts.append(html.Span("DECOY_", className="mv-pep-decoy"))
-        rest = rest[len("DECOY_") :]
-    for token in _MOD.split(rest):
-        if not token:
-            continue
-        if _MOD.fullmatch(token):
-            parts.append(html.Span(token[1:-1], className="mv-pep-mod"))
+    if pf.nterm:
+        parts.append(_mod_span("n", pf.nterm))
+        parts.append(html.Span("-", className="mv-pep-term"))
+    plain = ""
+    for r in pf.residues:
+        if r.mods:
+            if plain:
+                parts.append(plain)
+                plain = ""
+            parts.append(_mod_span(r.aa, r.mods))
         else:
-            parts.append(token)
-    return html.Span(parts, className="mv-pep", style={"fontSize": size})
+            plain += r.aa
+    if plain:
+        parts.append(plain)
+    if pf.cterm:
+        parts.append(html.Span("-", className="mv-pep-term"))
+        parts.append(_mod_span("c", pf.cterm))
+    return html.Span(parts, className="mv-pep", style={"fontSize": size}, title=text)
+
+
+def validation_icon(
+    q: Any,
+    threshold: float | None,
+    *,
+    label: str | None = "target",
+    column: str = "q",
+    size: int = 18,
+    spike: bool = False,
+) -> Any:
+    """PeptideShaker-style validation mark: does the row pass the threshold?
+
+    Green check: ``q <= threshold`` on the engine's column; grey cross: above it, or no
+    value; an orange D marks a decoy, a grape E an entrapment spike-in. The tooltip
+    states the column, the value and the cut.
+    """
+    try:
+        value = float(q)
+    except (TypeError, ValueError):
+        value = float("nan")
+    shown = fmt_q(value, threshold) or "not set"
+    if label == "decoy":
+        mark, colour, tip = "D", "orange", f"decoy; {column} {shown}"
+    elif threshold is not None and not math.isnan(value) and value <= threshold:
+        mark, colour = icon("check", size - 6), "green"
+        tip = f"passes: {column} {shown} ≤ {threshold:g}"
+    else:
+        cut = f" > {threshold:g}" if threshold is not None and not math.isnan(value) else ""
+        mark, colour = icon("x", size - 6), "gray"
+        tip = f"does not pass: {column} {shown}{cut}"
+    if spike:
+        mark, colour, tip = "E", "grape", f"entrapment spike-in; {tip}"
+    badge = dmc.ThemeIcon(
+        mark,
+        size=size,
+        radius="xl",
+        color=colour,
+        variant="light",
+        style={"fontSize": f"{size - 8}px", "fontWeight": 700},
+    )
+    return dmc.Tooltip(badge, label=tip, multiline=False, w="auto")
+
+
+def spark_bar(
+    value: Any,
+    *,
+    lo: float,
+    hi: float,
+    scale: str = "linear",
+    colour: str = "var(--mantine-color-indigo-6)",
+    text: str | None = None,
+    width: int = 64,
+    tip: str | None = None,
+) -> Any:
+    """An in-cell bar with its value, like PeptideShaker's JSparklines.
+
+    ``scale`` is ``linear``, ``log10`` or ``neglog10`` (for q values, so that a longer
+    bar is a smaller q). The bar is a display only; ``tip`` should say what it encodes.
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        v = float("nan")
+
+    def tr(x: float) -> float:
+        if scale == "log10":
+            return math.log10(max(x, 1e-300))
+        if scale == "neglog10":
+            return -math.log10(max(x, 1e-300))
+        return x
+
+    frac = 0.0
+    if not math.isnan(v):
+        a, b = tr(lo), tr(hi)
+        frac = 0.0 if b == a else min(1.0, max(0.0, (tr(v) - a) / (b - a)))
+    bar = html.Div(
+        html.Div(
+            className="mv-spark-fill",
+            style={"width": f"{100 * frac:.1f}%", "background": colour},
+        ),
+        className="mv-spark",
+        style={"width": f"{width}px"},
+    )
+    label = text if text is not None else (fmt(v) if not math.isnan(v) else "")
+    body = html.Div([bar, html.Span(label, className="mv-spark-text")], className="mv-spark-cell")
+    return dmc.Tooltip(body, label=tip, multiline=False, w="auto") if tip else body
 
 
 def chip(
@@ -98,8 +295,28 @@ def section(
     subtitle: str | None = None,
     id: str | None = None,
     p: str = "md",
+    count: Any = None,
+    help: str | None = None,
 ) -> dmc.Card:
-    head = [html.Div(title, className="mv-section-title")]
+    """A card with a small uppercase title, like a PeptideShaker panel.
+
+    ``count`` is shown as a badge after the title (for example the rows of a table),
+    ``help`` as an info icon with a tooltip.
+    """
+    title_row: list[Any] = [html.Div(title, className="mv-section-title")]
+    if count is not None:
+        title_row.append(
+            dmc.Badge(
+                count if isinstance(count, str) else fmt(count),
+                size="sm",
+                color="gray",
+                variant="light",
+                style={"textTransform": "none"},
+            )
+        )
+    if help:
+        title_row.append(dmc.Tooltip(html.Span(icon("info", 13), className="mv-help"), label=help))
+    head = [dmc.Group(title_row, gap=6) if len(title_row) > 1 else title_row[0]]
     if subtitle:
         head.append(dmc.Text(subtitle, size="xs", c="dimmed", mt=2))
     header = (

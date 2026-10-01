@@ -217,3 +217,77 @@ body {
 .mv-table .mantine-Badge-label {
   overflow: visible;
 }
+
+/* Peptidoforms, PeptideShaker style: modified residues coloured, with a short tag */
+.mv-pep-modres {
+  font-weight: 800;
+}
+.mv-pep-tag {
+  font-size: 0.6em;
+  font-weight: 650;
+  vertical-align: super;
+  margin: 0 1px 0 0.5px;
+  letter-spacing: 0;
+}
+.mv-pep-term {
+  opacity: 0.55;
+}
+.mv-help {
+  display: inline-flex;
+  color: var(--mantine-color-dimmed);
+  cursor: help;
+}
+
+/* In-cell bars (PeptideShaker's JSparklines) */
+.mv-spark-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+}
+.mv-spark {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--mantine-color-default-border);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.mv-spark-fill {
+  height: 100%;
+  border-radius: 4px;
+}
+.mv-spark-text {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82em;
+  white-space: nowrap;
+}
+
+/* Validation marks (grids) */
+.mv-valid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  vertical-align: middle;
+}
+.mv-valid-pass {
+  background: var(--mantine-color-green-light);
+  color: var(--mantine-color-green-light-color);
+}
+.mv-valid-fail {
+  background: var(--mantine-color-gray-light);
+  color: var(--mantine-color-gray-light-color);
+}
+.mv-valid-decoy {
+  background: var(--mantine-color-orange-light);
+  color: var(--mantine-color-orange-light-color);
+}
+.mv-valid-spike {
+  background: var(--mantine-color-grape-light);
+  color: var(--mantine-color-grape-light-color);
+}

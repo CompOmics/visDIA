@@ -1,0 +1,271 @@
+/* mumdia-viewer: sequence coverage views (ui/coverage.py, assets/coverage.js). */
+
+:root {
+  --mvc-pass: var(--mantine-color-green-6);
+  --mvc-fail: var(--mantine-color-gray-5);
+  --mvc-track: var(--mantine-color-default-border);
+  --mvc-sel: var(--mantine-color-indigo-6);
+}
+[data-mantine-color-scheme="dark"] {
+  --mvc-pass: var(--mantine-color-green-7);
+  --mvc-fail: var(--mantine-color-dark-2);
+  --mvc-track: var(--mantine-color-dark-4);
+  --mvc-sel: var(--mantine-color-indigo-4);
+}
+
+.mvc-strip {
+  padding: 5px 12px 6px;
+  border-top: 1px solid var(--ib-grid-border, var(--mantine-color-default-border));
+  flex: none;
+}
+.mvc-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+.mvc-message code {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.95em;
+}
+.mvc-warn {
+  color: var(--mantine-color-orange-light-color);
+}
+
+.mvc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: var(--mantine-font-size-xs);
+  white-space: nowrap;
+}
+.mvc-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  flex: none;
+}
+.mvc-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.mvc-member-one {
+  font-weight: 700;
+  font-family: var(--mantine-font-family-monospace);
+  flex: none;
+}
+.mvc-members {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+.mvc-member {
+  border: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-default);
+  color: inherit;
+  border-radius: 999px;
+  padding: 0 8px;
+  height: 20px;
+  font: inherit;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 11px;
+  cursor: pointer;
+}
+.mvc-member:hover {
+  background: var(--mantine-color-default-hover);
+}
+.mvc-member.is-on {
+  border-color: var(--mvc-sel);
+  color: var(--mvc-sel);
+  font-weight: 700;
+}
+.mvc-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex: none;
+  color: var(--mantine-color-dimmed);
+}
+.mvc-key {
+  display: inline-block;
+  width: 12px;
+  height: 8px;
+  border-radius: 2px;
+}
+.mvc-key.mvc-s2 {
+  background: var(--mvc-pass);
+}
+.mvc-key.mvc-s1 {
+  background: var(--mvc-fail);
+}
+.mvc-key-sel {
+  border: 2px solid var(--mvc-sel);
+  height: 10px;
+}
+.mvc-key-text {
+  margin-right: 6px;
+}
+
+/* The bar */
+.mvc-bar {
+  margin-top: 4px;
+  cursor: crosshair;
+  user-select: none;
+}
+.mvc-track {
+  position: relative;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--mvc-track);
+  overflow: hidden;
+}
+.mvc-run {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.mvc-run.mvc-s2,
+.mvc-res.mvc-s2 {
+  background: var(--mvc-pass);
+}
+.mvc-run.mvc-s1 {
+  background: var(--mvc-fail);
+}
+.mvc-sel-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.mvc-sel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 3px;
+  border: 2px solid var(--mvc-sel);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--mvc-sel) 30%, transparent);
+  box-sizing: border-box;
+}
+.mvc-cursor {
+  display: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--mantine-color-text);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.mvc-scale {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 1px;
+  font-size: 10.5px;
+  line-height: 14px;
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+.mvc-read {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  color: var(--mantine-color-text);
+}
+
+/* The full view (precursor page) */
+.mvc-full {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mvc-full .mvc-track {
+  height: 18px;
+}
+.mvc-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+.mvc-lane {
+  position: relative;
+  height: 9px;
+}
+.mvc-lane-pep {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.mvc-lane-pep.mvc-pass {
+  background: var(--mvc-pass);
+}
+.mvc-lane-pep.mvc-fail {
+  background: var(--mvc-fail);
+}
+.mvc-lane-pep.is-sel {
+  background: var(--mvc-sel);
+  outline: 2px solid var(--mvc-sel);
+  z-index: 1;
+}
+.mvc-more {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+.mvc-seq {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12px;
+  line-height: 19px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+.mvc-line {
+  white-space: pre;
+}
+.mvc-lnum {
+  display: inline-block;
+  width: 5.5ch;
+  margin-right: 1ch;
+  text-align: right;
+  color: var(--mantine-color-dimmed);
+  user-select: none;
+}
+.mvc-res.mvc-s2 {
+  color: #fff;
+  border-radius: 2px;
+}
+.mvc-res.mvc-s1 {
+  background: color-mix(in srgb, var(--mvc-fail) 45%, transparent);
+  border-radius: 2px;
+}
+.mvc-res.is-sel {
+  outline: 2px solid var(--mvc-sel);
+  outline-offset: -1px;
+  font-weight: 800;
+}
+
+/* In a narrow panel the legend gives its room to the summary (its words are in the
+   tooltip). */
+.mvc-strip,
+.mvc-full {
+  container-type: inline-size;
+}
+@container (max-width: 720px) {
+  .mvc-legend {
+    display: none;
+  }
+}

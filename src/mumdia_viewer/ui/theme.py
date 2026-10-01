@@ -52,6 +52,86 @@ SERIES = [
     "#868e96",
 ]
 
+# Modifications, as in PeptideShaker: a modified residue is drawn in its modification's
+# colour with a short tag; the full name is in the tooltip. A fixed modification such
+# as carbamidomethylation is drawn quietly. The same table is sent to the browser
+# (window.MV.mods), so tables and figures colour a modification alike.
+MOD_STYLES: dict[str, tuple[str, str]] = {
+    "Oxidation": ("ox", "#0ca678"),
+    "Carbamidomethyl": ("cam", "#868e96"),
+    "Phospho": ("ph", "#e03131"),
+    "Acetyl": ("ac", "#2f9e44"),
+    "Deamidated": ("de", "#c2255c"),
+    "Methyl": ("me", "#ae3ec9"),
+    "Dimethyl": ("me2", "#ae3ec9"),
+    "Trimethyl": ("me3", "#ae3ec9"),
+    "GlyGly": ("gg", "#0c8599"),
+    "Gln->pyro-Glu": ("pyro", "#5c940d"),
+    "Glu->pyro-Glu": ("pyro", "#5c940d"),
+    "Amidated": ("am", "#f08c00"),
+    "Carbamyl": ("cbm", "#e8590c"),
+    "TMT6plex": ("tmt", "#495057"),
+    "TMTpro": ("tmt", "#495057"),
+}
+# UNIMOD accessions of the names above, for peptidoforms written as [UNIMOD:35].
+UNIMOD_NAMES: dict[str, str] = {
+    "1": "Acetyl",
+    "4": "Carbamidomethyl",
+    "5": "Carbamyl",
+    "7": "Deamidated",
+    "21": "Phospho",
+    "27": "Glu->pyro-Glu",
+    "28": "Gln->pyro-Glu",
+    "34": "Methyl",
+    "35": "Oxidation",
+    "36": "Dimethyl",
+    "37": "Trimethyl",
+    "121": "GlyGly",
+    "737": "TMT6plex",
+    "2016": "TMTpro",
+}
+MOD_FALLBACK = ["#7048e8", "#d6336c", "#5c940d", "#9c36b5", "#1098ad", "#e67700"]
+
+
+def mod_name(text: str) -> str:
+    """The modification name of a ProForma tag (``UNIMOD:35`` becomes ``Oxidation``)."""
+    t = text.strip()
+    head, _, tail = t.partition(":")
+    if head.lower() == "unimod" and tail in UNIMOD_NAMES:
+        return UNIMOD_NAMES[tail]
+    return t
+
+
+def mod_style(text: str) -> tuple[str, str]:
+    """(short tag, colour) of a modification; an unknown one gets a stable colour.
+
+    The fallback colour depends on the characters only (not on Python's hash seed), and
+    the browser computes the same (clientside.js, mvMods.style).
+    """
+    name = mod_name(text)
+    if name in MOD_STYLES:
+        return MOD_STYLES[name]
+    short = name if len(name) <= 6 else name[:3].lower()
+    return short, MOD_FALLBACK[sum(ord(c) for c in name) % len(MOD_FALLBACK)]
+
+
+def browser_globals() -> dict:
+    """Constants the browser code needs (written into the page as window.MV)."""
+    return {
+        "mods": MOD_STYLES,
+        "unimod": UNIMOD_NAMES,
+        "modFallback": MOD_FALLBACK,
+        "colours": {
+            "target": TARGET,
+            "decoy": DECOY,
+            "spike": SPIKE,
+            "accept": ACCEPT,
+            "warn": WARN,
+            "units": UNIT_COLOURS,
+        },
+    }
+
+
 # Fragment ions: b in blue hues, y in red hues; each fragment gets its own shade.
 B_SHADES = [
     "#1864ab",
