@@ -29,7 +29,6 @@ from dash import (
     Input,
     Output,
     State,
-    clientside_callback,
     dcc,
     html,
     no_update,
@@ -521,7 +520,7 @@ def register(app, get_rs, base: str) -> None:
             return no_update
         return coverage_body(get_rs(), get_fasta(), request, t)
 
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvd", "init"),
         Output("pd-init", "data"),
         Input("pd-key", "data"),
@@ -530,7 +529,7 @@ def register(app, get_rs, base: str) -> None:
         State("pd-xview", "data"),
         State("pd-nav", "data"),
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvd", "scan"),
         Output("pd-scan", "data"),
         Output("pd-scrub", "value"),
@@ -544,7 +543,7 @@ def register(app, get_rs, base: str) -> None:
         State("pd-nav", "data"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvd", "hidden"),
         Output(XIC, "figure", allow_duplicate=True),
         Output(MIRROR, "figure", allow_duplicate=True),
@@ -553,14 +552,14 @@ def register(app, get_rs, base: str) -> None:
         State(MIRROR, "figure"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvd", "axis"),
         Output(XIC, "figure", allow_duplicate=True),
         Input("pd-xic-axis", "value"),
         State(XIC, "figure"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvd", "view"),
         Output(XIC, "figure", allow_duplicate=True),
         Output("pd-scrub", "min"),
@@ -572,20 +571,20 @@ def register(app, get_rs, base: str) -> None:
         State("pd-xview", "data"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvd", "settled"),
         Output("pd-settled", "data"),
         Input("pd-nav", "data"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvd", "open"),
         Output("url", "href", allow_duplicate=True),
         Input(COMP, "clickData"),
         prevent_initial_call=True,
     )
 
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvd", "fragView"),
         Output("pd-frag-table", "style"),
         Output("pd-ladder", "style"),
@@ -595,7 +594,7 @@ def register(app, get_rs, base: str) -> None:
     # The server's mirror goes through a store: Dash writes a user's zoom into the
     # graph's figure, so Plotly cannot keep it when a new figure arrives; detail.js puts
     # the zoom on the new figure (mvd.mirror).
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvd", "mirror"),
         Output(MIRROR, "figure", allow_duplicate=True),
         Input("pd-mirror-next", "data"),

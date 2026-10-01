@@ -52,7 +52,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from dash import ALL, ClientsideFunction, Input, Output, State, clientside_callback, dcc, html
+from dash import ALL, ClientsideFunction, Input, Output, State, dcc, html
 from dash import no_update as NO
 
 from mumdia_viewer.data import ResultSet, ViewerError
@@ -1086,7 +1086,7 @@ def register(app, get_rs, base: str) -> None:
         return out
 
     # Controls and the header threshold make the view (client side, no round trip).
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvb", "filters"),
         Output("ib-view", "data"),
         *[Input(c, "value") for c in CONTROLS],
@@ -1098,7 +1098,7 @@ def register(app, get_rs, base: str) -> None:
     # A new view empties the first table's block cache and rewrites the address; on the
     # first call of a page it writes the address and brings the header threshold to the
     # view's (a link with t= sets it).
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvb", "sync"),
         Output("ib-sync", "data"),
         Input("ib-view", "data"),
@@ -1108,7 +1108,7 @@ def register(app, get_rs, base: str) -> None:
     )
     # The page's first selection (the address's or the first row's); after that the
     # browser keeps the selection.
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvb", "sel"),
         Output("ib-sync", "data", allow_duplicate=True),
         Input("ib-sel", "data"),
@@ -1120,45 +1120,45 @@ def register(app, get_rs, base: str) -> None:
     )
     # The first block of a new view: keep the selection when it is there, else select
     # the first row.
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvb", "first"),
         Output("ib-sync", "data", allow_duplicate=True),
         Input("ib-first", "data"),
         prevent_initial_call=True,
     )
     # Answers from the server, applied (and kept) by the browser.
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvb", "children"),
         Output("ib-sync", "data", allow_duplicate=True),
         Input("ib-children", "data"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvb", "prefetched"),
         Output("ib-sync", "data", allow_duplicate=True),
         Input("ib-prefetched", "data"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvb", "preview"),
         Output("ib-sync", "data", allow_duplicate=True),
         Input("ib-preview-data", "data"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvb", "located"),
         Output("ib-sync", "data", allow_duplicate=True),
         Input("ib-located", "data"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvb", "level"),
         Output("ib-sync", "data", allow_duplicate=True),
         Input("ib-unit", "value"),
         State("ib-view", "data"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvb", "clear"),
         *[Output(c, "value", allow_duplicate=True) for c in CONTROLS],
         Output("ib-decoys", "checked", allow_duplicate=True),
@@ -1167,13 +1167,13 @@ def register(app, get_rs, base: str) -> None:
         prevent_initial_call=True,
     )
     for panel, menu in (("top", "ib-cols"), ("pep", "ib-pep-cols"), ("pre", "ib-pre-cols")):
-        clientside_callback(
+        app.clientside_callback(
             f"function (value) {{ return window.dash_clientside.mvb.columns('{panel}', value); }}",
             Output("ib-sync", "data", allow_duplicate=True),
             Input(menu, "value"),
             prevent_initial_call=True,
         )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mvb", "defaultColumns"),
         Output("ib-cols", "value", allow_duplicate=True),
         Input("ib-cols-default", "n_clicks"),

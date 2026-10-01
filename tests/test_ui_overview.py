@@ -104,6 +104,21 @@ def test_state_helpers():
     assert href("/t/", "overview") == "/t/"
 
 
+def test_two_apps_in_one_process_keep_their_own_callbacks(open_fixture):
+    """Callbacks registered on the app, not in Dash's global list (which the first app to
+    serve a request would take whole)."""
+    first = create_app(open_fixture("single"), url_base="/a/")
+    second = create_app(open_fixture("experiment"), url_base="/b/")
+    a = first.server.test_client().get("/a/_dash-dependencies").get_json()
+    b = second.server.test_client().get("/b/_dash-dependencies").get_json()
+
+    def clientside(deps):
+        return sorted(d["output"] for d in deps if d.get("clientside_function"))
+
+    assert clientside(a) and clientside(a) == clientside(b)
+    assert len(a) == len(b)
+
+
 @pytest.mark.parametrize("name", ["single", "experiment"])
 def test_app_builds_and_serves_the_shell(open_fixture, name):
     rs = open_fixture(name)

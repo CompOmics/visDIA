@@ -9,7 +9,7 @@ from typing import Any
 import dash_mantine_components as dmc
 import numpy as np
 import pandas as pd
-from dash import ClientsideFunction, Input, Output, State, clientside_callback, dcc, html
+from dash import ClientsideFunction, Input, Output, State, dcc, html
 
 from mumdia_viewer.data import ResultSet, ViewerError
 from mumdia_viewer.data import counts as counts_mod
@@ -702,7 +702,7 @@ def layout(ctx: PageContext) -> Any:
 
 
 def register(app, get_rs, base: str) -> None:
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mv", "slide"),
         *[Output(f"kpi-n-{u}", "children") for u in CARD_UNITS],
         *[Output(f"kpi-q-{u}", "children") for u in CARD_UNITS],
@@ -715,7 +715,7 @@ def register(app, get_rs, base: str) -> None:
         State("q-select", "value"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mv", "sliderIndex"),
         Output("ov-slider", "value"),
         Input("threshold", "data"),
@@ -723,7 +723,7 @@ def register(app, get_rs, base: str) -> None:
         prevent_initial_call=True,
     )
     for name in ("ov-hist", "ov-curves"):
-        clientside_callback(
+        app.clientside_callback(
             ClientsideFunction("mv", "axisType"),
             Output({"type": "fig", "name": name}, "figure", allow_duplicate=True),
             Input(f"{name}-axis", "value"),

@@ -15,7 +15,6 @@ from dash import (
     Input,
     Output,
     State,
-    clientside_callback,
     dcc,
     html,
     no_update,
@@ -366,19 +365,19 @@ def create_app(
 
     # Colour scheme: the stored choice (or the system preference) drives Mantine, and
     # every graph swaps its Plotly template in the browser.
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mv", "toggleScheme"),
         Output("scheme", "data"),
         Input("scheme-toggle", "n_clicks"),
         State("scheme", "data"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mv", "scheme"),
         Output("provider", "forceColorScheme"),
         Input("scheme", "data"),
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mv", "retheme"),
         Output({"type": "fig", "name": ALL}, "figure", allow_duplicate=True),
         Input("scheme", "data"),
@@ -386,18 +385,18 @@ def create_app(
         State("templates", "data"),
         prevent_initial_call="initial_duplicate",
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mv", "threshold"),
         Output("threshold", "data"),
         Input("q-select", "value"),
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mv", "openDrawer"),
         Output("notices-drawer", "opened"),
         Input("notices-open", "n_clicks"),
         prevent_initial_call=True,
     )
-    clientside_callback(
+    app.clientside_callback(
         ClientsideFunction("mv", "burger"),
         Output("shell", "navbar"),
         Input("burger", "opened"),
