@@ -41,6 +41,8 @@ _PATHS: dict[str, str] = {
     '1.3-2L14 9V3"/><path d="M7.5 15h9"/>',
     "clock": '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
     "layers": '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+    "scale": '<path d="M12 4v16M8 20h8M5 7h14"/><path d="m5 7-3 6a3 3 0 0 0 6 0zM19 7l-3 6a3 '
+    '3 0 0 0 6 0z"/>',
     "keyboard": '<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 '
     '10h.01M14 10h.01M18 10h.01M7 14h10"/>',
 }

@@ -83,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     configure_arrow()
     from mumdia_viewer.data import ViewerError, open_results
     from mumdia_viewer.data.fasta import Fasta, FastaSource, find_recorded_fasta
-    from mumdia_viewer.ui.app import create_app
+    from mumdia_viewer.ui.app import create_app, create_compare_apps
 
     remaps = {}
     for item in args.remap:
@@ -117,9 +117,14 @@ def main(argv: list[str] | None = None) -> int:
         print("mumdia-viewer: no FASTA; give one with --fasta to show sequence coverage")
     base = "/" if args.no_token else f"/{secrets.token_urlsafe(9)}/"
     port = args.port or _free_port(8050)
-    app = create_app(rs, compare=compare, url_base=base, fasta=fasta)
+    if compare is not None:
+        app, _ = create_compare_apps(rs, compare, url_base=base, fasta=fasta)
+    else:
+        app = create_app(rs, url_base=base, fasta=fasta)
     url = f"http://127.0.0.1:{port}{base}"
     print(f"mumdia-viewer: serving {rs.root} ({rs.kind}) at {url}")
+    if compare is not None:
+        print(f"mumdia-viewer: comparing with {compare.root} ({compare.kind}), served at {url}b/")
     if args.host != "127.0.0.1":
         print(
             f"mumdia-viewer: bound to {args.host}; anyone who can reach it and knows the "

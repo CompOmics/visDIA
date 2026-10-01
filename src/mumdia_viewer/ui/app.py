@@ -26,7 +26,20 @@ from mumdia_viewer.data.errors import ViewerError
 from mumdia_viewer.data.fasta import Fasta
 from mumdia_viewer.data.notes import NoteBook
 
-from . import browser, calibration, detail, notes, overview, protein, qc, quant
+from . import (
+    browser,
+    calibration,
+    compare,
+    detail,
+    notes,
+    overview,
+    protein,
+    qc,
+    quant,
+    ratios,
+    runs,
+    spectra,
+)
 from .icons import icon
 from .state import (
     DEFAULT_THRESHOLD,
@@ -51,6 +64,10 @@ PAGES = {
     "qc": qc,
     "quant": quant,
     "notes": notes,
+    "runs": runs,
+    "ratios": ratios,
+    "compare": compare,
+    "spectra": spectra,
 }
 # Navigation entries after the results: (page, label, icon).
 VIEWS = (
@@ -58,6 +75,9 @@ VIEWS = (
     ("calibration", "Calibration", "calibration"),
     ("qc", "Run QC", "spectrum"),
     ("quant", "Quant QC", "quant"),
+    ("ratios", "Condition ratios", "scale"),
+    ("spectra", "Spectrum browser", "spectrum"),
+    ("compare", "Compare", "compare"),
     ("notes", "Notes", "check"),
 )
 
@@ -325,14 +345,19 @@ def create_app(
     compare: ResultSet | None = None,
     url_base: str = "/",
     fasta: Fasta | None = None,
+    server: Any = None,
+    compare_base: str | None = None,
 ) -> Dash:
     """Build the app for one result set.
 
-    ``compare`` is kept for the compare view; ``fasta`` gives the protein sequences of
-    the coverage views (none: the views say how to add a FASTA).
+    ``compare`` is the other result set of the compare view, served as a full viewer of
+    its own at ``compare_base`` (see :func:`create_compare_apps`); ``fasta`` gives the
+    protein sequences of the coverage views (none: the views say how to add a FASTA);
+    ``server`` is the Flask server to register on (default: a new one).
     """
     app = Dash(
         __name__,
+        server=server if server is not None else True,
         url_base_pathname=url_base,
         assets_folder=str(ASSETS),
         suppress_callback_exceptions=True,
@@ -342,6 +367,8 @@ def create_app(
     app.index_string = INDEX.replace("__MV__", json.dumps(browser_globals()))
     state = {"rs": rs, "compare": compare, "fasta": fasta}
     app.mv_fasta = lambda: state["fasta"]  # type: ignore[attr-defined]
+    app.mv_compare = lambda: state["compare"]  # type: ignore[attr-defined]
+    app.mv_compare_base = lambda: compare_base  # type: ignore[attr-defined]
 
     def get_rs() -> ResultSet:
         return state["rs"]
@@ -387,6 +414,9 @@ def create_app(
             dcc.Store(id="recent", storage_type="session", data=[]),
             # Bumped when a note is saved: the navigation's count follows.
             dcc.Store(id="notes-version", data=0),
+            # Runs to conditions, shared by the quant QC and ratio views (run name to
+            # condition; an empty mapping means the suggestions apply).
+            dcc.Store(id="mv-conditions", storage_type="local"),
             shell,
         ],
         id="provider",
@@ -516,3 +546,20 @@ def create_app(
     for module in PAGES.values():
         module.register(app, get_rs, base)
     return app
+
+
+def create_compare_apps(
+    rs: ResultSet,
+    other: ResultSet,
+    *,
+    url_base: str = "/",
+    fasta: Fasta | None = None,
+) -> tuple[Dash, Dash]:
+    """The viewer of ``rs`` with a compare view, and a full viewer of ``other`` at
+    ``url_base + "b/"`` on the same server (so the compare view links into both)."""
+    base_b = f"{url_base}b/"
+    app_a = create_app(rs, compare=other, url_base=url_base, fasta=fasta, compare_base=base_b)
+    app_b = create_app(
+        other, compare=rs, url_base=base_b, fasta=fasta, server=app_a.server, compare_base=url_base
+    )
+    return app_a, app_b

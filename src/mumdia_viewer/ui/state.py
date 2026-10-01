@@ -26,6 +26,10 @@ PAGES = (
     "qc",
     "quant",
     "notes",
+    "runs",
+    "ratios",
+    "compare",
+    "spectra",
 )
 
 

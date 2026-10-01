@@ -130,3 +130,18 @@ def test_app_builds_and_serves_the_shell(open_fixture, name):
     deps = client.get("/abc/_dash-dependencies").get_json()
     outputs = " ".join(d["output"] for d in deps)
     assert "page.children" in outputs and "threshold.data" in outputs
+
+
+def test_compare_serves_both_viewers_on_one_server(open_fixture):
+    from mumdia_viewer.ui.app import create_compare_apps
+
+    a, b = create_compare_apps(open_fixture("single"), open_fixture("experiment"), url_base="/c/")
+    assert a.server is b.server
+    client = a.server.test_client()
+    assert client.get("/c/").status_code == 200 and client.get("/c/b/").status_code == 200
+    assert a.mv_compare() is open_fixture("experiment")
+    assert b.mv_compare() is open_fixture("single")
+    assert a.mv_compare_base() == "/c/b/" and b.mv_compare_base() == "/c/"
+    deps_a = client.get("/c/_dash-dependencies").get_json()
+    deps_b = client.get("/c/b/_dash-dependencies").get_json()
+    assert len(deps_a) == len(deps_b) > 0
