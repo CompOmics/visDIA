@@ -22,6 +22,7 @@ from mumdia_viewer.data import open_results
 from mumdia_viewer.data.counts import (
     ENGINE_STAT_KEYS,
     MAX_WINNER_KEYS,
+    counts_at,
     engine_check,
     engine_stats,
     group_winner_sql,
@@ -477,6 +478,34 @@ def test_id_curve_bin_correction_on_synthetic_values(fixture_dir, tmp_path):
     assert list(curve["q"]) == list(edges)
     target = table.filter(pc.equal(table["label"], "target"))["q_value"].to_numpy()
     assert list(curve["count"]) == [int((target <= q).sum()) for q in edges]
+
+
+@pytest.mark.parametrize("name", COUNT_FIXTURES)
+def test_counts_at_equals_unit_counts_at_every_threshold(open_fixture, name):
+    rs = open_fixture(name)
+    table = _table(rs)
+    for unit in COUNT_UNITS:
+        values = np.unique(table[UNITS[unit].q_column].to_numpy())
+        values = values[values < 1.0]
+        stored = [float(v) for v in values[[0, len(values) // 2, -1]]] if len(values) else []
+        grid = [*np.logspace(-4, -1, 13), 0.01, 0.5, *stored]
+        df = counts_at(rs, unit, grid)
+        assert list(df["q"]) == sorted(set(df["q"]))
+        expected = [{c.unit: c.n_target for c in unit_counts(rs, q)}[unit] for q in df["q"]]
+        assert list(df["count"]) == expected, (name, unit)
+        assert np.all(np.diff(df["count"].to_numpy()) >= 0)
+    decoys = counts_at(rs, "psm", [0.01, 0.05], label="decoy")
+    assert list(decoys["count"]) == [_reference(table, "psm", "decoy", q) for q in (0.01, 0.05)]
+
+
+def test_counts_at_refuses_bad_input(open_fixture):
+    rs = open_fixture("experiment")
+    with pytest.raises(ValueError, match="empty"):
+        counts_at(rs, "psm", [])
+    with pytest.raises(ValueError, match="must be below 1"):
+        counts_at(rs, "peptide", [0.01, 1.0])
+    with pytest.raises(ValueError, match="within each run"):
+        counts_at(rs, "run_psm", [0.01])
 
 
 def test_per_run_curves(open_fixture):

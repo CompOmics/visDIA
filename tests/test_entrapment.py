@@ -22,6 +22,7 @@ import pytest
 
 from mumdia_viewer.data import open_results
 from mumdia_viewer.data.counts import (
+    counts_at,
     engine_check,
     engine_stats,
     group_winner_sql,
@@ -282,6 +283,16 @@ def test_counts_in_entrapment_mode_are_real_targets(entrap):
     hist = score_histogram(entrap, bins=20)
     assert list(hist.columns) == ["bin_lo", "bin_hi", "target", "decoy", "spike_in"]
     assert int(hist[["target", "decoy", "spike_in"]].to_numpy().sum()) == entrap.scored.rows
+
+
+def test_counts_at_counts_real_targets_in_entrapment_mode(entrap):
+    grid = [0.001, 0.005, 0.01, 0.05, 0.09]
+    for unit in COUNT_UNITS:
+        df = counts_at(entrap, unit, grid)
+        expected = [{c.unit: c.n_target for c in unit_counts(entrap, q)}[unit] for q in grid]
+        assert list(df["count"]) == expected, unit
+    spikes = counts_at(entrap, "peptide", [0.01], label="spike_in")
+    assert int(spikes["count"].iloc[0]) == 138
 
 
 def test_thresholds_are_validated(entrap):

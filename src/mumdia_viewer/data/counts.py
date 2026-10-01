@@ -58,6 +58,7 @@ __all__ = [
     "MAX_WINNER_KEYS",
     "Count",
     "EngineCheck",
+    "counts_at",
     "engine_check",
     "engine_stats",
     "group_winner_sql",
@@ -641,6 +642,67 @@ def id_curve(
             "per_run": per_run,
             "title": f"{noun} {u.plural} ({u.distinct_label}) with {u.q_column} <= q",
             "note": note,
+            "sql": sql,
+        }
+    )
+    rs._memo[key] = df.copy()
+    return df
+
+
+def counts_at(
+    rs: ResultSet,
+    unit_key: str,
+    thresholds: Iterable[float],
+    *,
+    label: str = "target",
+) -> pd.DataFrame:
+    """The count of a unit at each of ``thresholds`` (any spacing, for example a log grid).
+
+    Columns ``q`` (the sorted, distinct thresholds) and ``count``. The count at ``q`` is
+    the :func:`unit_counts` count at ``q``: the rows, or the distinct keys, whose value
+    of the engine's column is at most ``q``. One scan computes the smallest q of each key
+    below the largest threshold, then one filtered count per threshold. No q value is
+    recomputed.
+    """
+    u = get_unit(unit_key)
+    qs = sorted({check_threshold(u, float(q)) for q in thresholds})
+    if not qs:
+        raise ValueError("thresholds must not be empty.")
+    if u.per_run and len(rs.runs) > 1:
+        raise ValueError(
+            "run_psm_q is computed within each run, so a pooled count of it has no meaning; "
+            "use id_curve(..., per_run=True)."
+        )
+    cls = count_classes(rs)
+    predicate = _label_predicate(cls, label)
+    key = ("counts_at", rs.scored.identity(), u.key, tuple(qs), label, cls.key)
+    if key in rs._memo:
+        return rs._memo[key].copy()
+    condition = f"{predicate} AND {u.q_column} <= $qmax"
+    if len(u.distinct) == 1:
+        # count(DISTINCT key) skips a NULL key; the GROUP BY below must too.
+        condition += f" AND {u.distinct[0]} IS NOT NULL"
+    where = u.where_sql(condition)
+    if u.key_sql is None:
+        inner = f"SELECT {u.q_column} AS q FROM read_parquet($path) WHERE {where}"
+    else:
+        inner = (
+            f"SELECT min({u.q_column}) AS q FROM read_parquet($path) WHERE {where} "
+            f"GROUP BY {', '.join(u.distinct)}"
+        )
+    filters = ", ".join(f"count(*) FILTER (WHERE q <= $t{i})" for i in range(len(qs)))
+    sql = f"WITH x AS ({inner}) SELECT {filters} FROM x"
+    params: dict[str, Any] = {**cls.params, "path": _path(rs), "qmax": qs[-1]}
+    params.update({f"t{i}": q for i, q in enumerate(qs)})
+    row = _execute(rs, sql, params).fetchone()
+    assert row is not None
+    df = pd.DataFrame({"q": qs, "count": [int(n) for n in row]})
+    df.attrs.update(
+        {
+            "unit": u.key,
+            "q_column": u.q_column,
+            "label": label,
+            "note": "Counts of the engine's column at each threshold; no q value is recomputed.",
             "sql": sql,
         }
     )

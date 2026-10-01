@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dash import Input, Output, State, dash_table, dcc, html, no_update
 
-from mumdia_viewer.data import ResultSet, ViewerError
+from mumdia_viewer.data import ViewerError
 from mumdia_viewer.data.tables import TableQuery, identification_table
 
 from .components import MUTED, SECTION, fmt, precursor_href
@@ -28,7 +28,8 @@ HIDDEN = {"source", "file_row_number", "rn", "pos"}
 PAGE_SIZE = 25
 
 
-def layout(rs: ResultSet) -> html.Div:
+def layout(ctx) -> html.Div:
+    rs = ctx.rs
     runs = [{"label": "all runs", "value": ""}] + [
         {"label": r.label, "value": r.name} for r in rs.runs if r.name
     ]

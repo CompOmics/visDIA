@@ -1,0 +1,219 @@
+/* mumdia-viewer: global styles on top of Mantine. */
+
+html, body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background: var(--mantine-color-body);
+}
+
+.mv-mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.85em;
+}
+
+.mv-muted {
+  color: var(--mantine-color-dimmed);
+}
+
+/* KPI cards */
+.mv-kpi {
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  cursor: pointer;
+}
+.mv-kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--mantine-shadow-md);
+}
+.mv-kpi-value {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Section titles inside cards */
+.mv-section-title {
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+/* Peptidoform rendering */
+.mv-pep {
+  font-family: var(--mantine-font-family-monospace);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.mv-pep-mod {
+  color: var(--mantine-color-violet-6);
+  font-size: 0.7em;
+  vertical-align: super;
+  font-weight: 500;
+}
+.mv-pep-decoy {
+  color: var(--mantine-color-orange-7);
+}
+
+/* Navbar links */
+.mv-nav .mantine-NavLink-root {
+  border-radius: var(--mantine-radius-md);
+  margin-bottom: 2px;
+}
+
+/* Graphs fill their card */
+.mv-graph {
+  width: 100%;
+}
+
+/* Evidence rows */
+.mv-evidence-row {
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--mantine-color-default-border);
+}
+.mv-evidence-row:last-child {
+  border-bottom: none;
+}
+
+/* Percentile bar */
+.mv-pbar {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--mantine-color-default-border);
+}
+.mv-pbar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--mantine-color-indigo-6);
+}
+.mv-pbar-mark {
+  position: absolute;
+  top: -3px;
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--mantine-color-orange-7);
+}
+
+/* AG Grid: follow Mantine fonts and density */
+.ag-theme-quartz, .ag-theme-quartz-dark {
+  --ag-font-family: var(--mantine-font-family);
+  --ag-font-size: 13px;
+  --ag-row-height: 34px;
+  --ag-header-height: 38px;
+  --ag-border-radius: 10px;
+  --ag-wrapper-border-radius: 10px;
+}
+.mv-grid-row-clickable .ag-row {
+  cursor: pointer;
+}
+
+/* Keyboard hint */
+.mv-kbd {
+  font-size: 0.72rem;
+}
+
+/* Shell */
+.mv-brand {
+  color: inherit;
+  text-decoration: none;
+}
+.mv-result-chip {
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 999px;
+  background: var(--mantine-color-default);
+}
+.mv-nav-heading {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  padding: 0 10px 6px;
+}
+.mv-path {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.68rem;
+  word-break: break-all;
+}
+.mv-recent .mantine-NavLink-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mv-page {
+  max-width: 1680px;
+  margin: 0 auto;
+}
+@media (max-width: 62em) {
+  .mv-hide-mobile {
+    display: none;
+  }
+}
+
+/* Page header */
+.mv-title {
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.mv-eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mantine-color-indigo-6);
+}
+
+/* KPI card details */
+.mv-kpi-icon {
+  border-radius: 10px;
+}
+.mv-kpi a {
+  color: inherit;
+  text-decoration: none;
+}
+.mv-kpi-q {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.75rem;
+}
+
+/* Threshold slider strip */
+.mv-slider-strip {
+  padding: 14px 18px 26px;
+}
+
+/* Small tables inside cards */
+.mv-table td, .mv-table th {
+  font-size: 0.8rem;
+}
+.mv-table td.mv-num, .mv-table th.mv-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.mv-wrap {
+  word-break: break-all;
+}
+.mv-table .mantine-Badge-root {
+  flex-shrink: 0;
+}
+.mv-table td {
+  vertical-align: middle;
+}
+.mv-table .mantine-Badge-root {
+  max-width: none;
+}
+.mv-table .mantine-Badge-label {
+  overflow: visible;
+}

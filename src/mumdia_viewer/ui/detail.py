@@ -171,7 +171,37 @@ def _partner(d: PrecursorDetail, base: str) -> html.Div:
     return html.Div(children)
 
 
-def layout(rs: ResultSet, base: str, run: str, cid: int) -> html.Div:
+def _target(ctx) -> tuple[str, int] | None:
+    try:
+        return ctx.query.get("run", ""), int(ctx.query.get("cid", ""))
+    except ValueError:
+        return None
+
+
+def recent(ctx) -> dict | None:
+    target = _target(ctx)
+    if target is None:
+        return None
+    try:
+        d = get_detail(ctx.rs, *target)
+    except ViewerError:
+        return None
+    s = d.scored
+    return {
+        "run": target[0],
+        "cid": target[1],
+        "peptidoform": s.get("peptidoform"),
+        "charge": s.get("charge"),
+        "label": s.get("label"),
+    }
+
+
+def layout(ctx) -> html.Div:
+    target = _target(ctx)
+    if target is None:
+        return html.Div("no candidate id in the address")
+    rs, base = ctx.rs, ctx.base
+    run, cid = target
     try:
         d = get_detail(rs, run, cid)
     except ViewerError as exc:
@@ -234,7 +264,7 @@ def layout(rs: ResultSet, base: str, run: str, cid: int) -> html.Div:
     )
 
 
-def register(app, get_rs) -> None:
+def register(app, get_rs, base: str) -> None:
     """Callbacks of the detail page."""
 
     @app.callback(
