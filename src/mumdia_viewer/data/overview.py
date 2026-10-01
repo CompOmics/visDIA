@@ -644,3 +644,61 @@ def verify_hashes(
             }
         )
     return pd.DataFrame(rows, columns=HASH_COLUMNS)
+
+
+# --------------------------------------------------------------------------- engine report
+
+
+@dataclass(frozen=True)
+class ReportNumber:
+    """A number the engine's report stage recorded, with the unit it really counts."""
+
+    key: str
+    value: Any
+    label: str
+    source: str
+
+
+def engine_report_numbers(rs: ResultSet) -> list[ReportNumber]:
+    """The experiment report block of ``experiment_manifest.json``, labelled by its unit.
+
+    ``n_precursors`` is the row count of the experiment's peptides.tsv: one precursor
+    (the group winner) per base peptide accepted on ``peptide_q_value``, so it equals the
+    peptide count and not the precursor count on ``precursor_q``. With match-between-runs
+    it includes transfer-admitted rows. Single runs record no such block; their numbers
+    come from the rescore report (see ``counts.engine_stats``).
+    """
+    exp = rs.manifest.experiment or {}
+    report = exp.get("report") or {}
+    if not isinstance(report, dict) or not report:
+        return []
+    source = "experiment_manifest.json experiment.report"
+    t = report.get("q_threshold")
+    at = f" at {t}" if t is not None else ""
+    mbr = str(exp.get("mbr", "None")) != "None"
+    transfers = "; includes rows admitted by match-between-runs transfers" if mbr else ""
+    out = []
+    if "n_precursors" in report:
+        out.append(
+            ReportNumber(
+                "n_precursors",
+                report["n_precursors"],
+                f"peptides.tsv rows{at}: one precursor per base peptide accepted on the "
+                f"experiment-wide peptide_q_value (a peptide count, not a precursor_q count)"
+                + transfers,
+                source,
+            )
+        )
+    if "n_protein_groups" in report:
+        out.append(
+            ReportNumber(
+                "n_protein_groups",
+                report["n_protein_groups"],
+                f"proteins.tsv rows{at}: protein groups accepted on the experiment-wide pg_q_value"
+                + transfers,
+                source,
+            )
+        )
+    if "unit" in report:
+        out.append(ReportNumber("unit", report["unit"], "the unit the engine recorded", source))
+    return out

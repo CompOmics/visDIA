@@ -30,9 +30,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from .artifacts import Artifact
 from .candidate_index import CandidateIndex, concat_parts, read_candidate_rows
 from .chromatograms import CandidateChromatogram, ChromatogramSource
-from .competition import QValue, competition, exact_partner, partner_map, q_values, scored_rows_of
+from .competition import QValue, competition, exact_partner, q_values, scored_rows_of
 from .discovery import ResultSet, Run
 from .duck import sql_path
 from .entrapment import entrapment_expr, markers_present, settings_for
@@ -49,7 +50,7 @@ from .mbr import mbr_ran, transfer_of
 from .quant import QuantState, quant_state
 from .rescore import RescoreInfo, rescore_info
 from .spectra import ScanPick, ScanTable, Spectrum
-from .windows import AmbiguousBand, RtWindow, rt_window
+from .windows import RtWindow, rt_window
 
 EXTRACTED_COLUMNS = (
     "candidate_id",
@@ -122,6 +123,9 @@ class PrecursorDetail:
     transfer: dict[str, Any] | None
     evidence: list[EvidenceItem]
     markers: dict[str, Any]
+    # The row quant and the report read after match-between-runs (q lowered on
+    # transfers), when it differs from the native row in ``scored``.
+    scored_after_mbr: dict[str, Any] | None = None
     notes: list[str] = field(default_factory=list)
     timings_ms: dict[str, float] = field(default_factory=dict)
 
@@ -171,37 +175,59 @@ def _finite(value: Any) -> float | None:
 # --------------------------------------------------------------------------- rows
 
 
-def _scored_row(rs: ResultSet, run: Run, cid: int) -> dict[str, Any]:
-    """The run's scored row of ``cid``: the per-run table by index, else the pooled table."""
-    art = run.artifact("psms_scored")
-    if art is not None and art.usable:
-        index = CandidateIndex.for_artifact(art, rs.cache)
-        table = concat_parts(read_candidate_rows(art.parquet(), index, cid, None, cached=False))
-        if table is not None:
-            rows = [r for r in table.to_pylist() if int(r.get("source", run.index)) == run.index]
-            if len(rows) == 1:
-                return rows[0]
-            if len(rows) > 1:
-                raise InconsistentData(
-                    f"candidate {cid} has {len(rows)} scored rows in run {run.label}."
-                )
+def _point_row(rs: ResultSet, artifact: Artifact, cid: int, source: int) -> dict[str, Any] | None:
+    """One row of a scored table by (source, candidate_id), with a DuckDB point query.
+
+    A single run's scored table is one row group of up to a million rows; a point query
+    reads the filter column and the matching row only.
+    """
     df = rs.duck.df(
-        "SELECT * FROM read_parquet($path) WHERE source = $source AND candidate_id = $cid",
-        {"path": sql_path(rs.scored.require()), "source": run.index, "cid": int(cid)},
+        "SELECT * FROM read_parquet($path) WHERE candidate_id = $cid AND source = $source",
+        {"path": sql_path(artifact.require()), "cid": int(cid), "source": int(source)},
     )
     if df.empty:
-        raise ArtifactNotFound(f"candidate {cid} has no scored row in run {run.label}.")
+        return None
     if len(df) > 1:
-        raise InconsistentData(f"candidate {cid} has {len(df)} scored rows in run {run.label}.")
+        raise InconsistentData(
+            f"candidate {cid} has {len(df)} rows with source {source} in {artifact.path}."
+        )
+    row = df.iloc[0].to_dict()
     return {
-        k: (None if pd.isna(v) else v) if not isinstance(v, list | np.ndarray) else v
-        for k, v in df.iloc[0].to_dict().items()
+        k: (None if not isinstance(v, list | np.ndarray) and pd.isna(v) else v)
+        for k, v in row.items()
     }
+
+
+def _scored_rows(rs: ResultSet, run: Run, cid: int) -> tuple[dict[str, Any], dict | None]:
+    """(native scored row, row after match-between-runs or None).
+
+    After MBR a run's ``scored.parquet`` is the split of ``scored_mbr.parquet``, whose
+    ``q_value``, ``run_psm_q`` and ``experiment_psm_q`` are lowered on transferred rows.
+    The native values, the rescorer's, stay in ``scored_combined.parquet``.
+    """
+    if rs.is_experiment and mbr_ran(rs):
+        native = _point_row(rs, rs.scored, cid, run.index)
+        split = run.artifact("psms_scored")
+        after = (
+            _point_row(rs, split, cid, run.index) if split is not None and split.usable else None
+        )
+    else:
+        art = run.artifact("psms_scored")
+        native = _point_row(
+            rs, art if art is not None and art.usable else rs.scored, cid, run.index
+        )
+        after = None
+    if native is None:
+        raise ArtifactNotFound(f"candidate {cid} has no scored row in run {run.label}.")
+    return native, after
 
 
 def _peak_rows(rs: ResultSet, run: Run, cid: int) -> tuple[pd.DataFrame, str]:
     """Every extracted peak of ``cid`` (one row per ``peak_rank``) and where it came from."""
     art = run.artifact("psms_extracted")
+    refused = None
+    if art is not None and art.present and not art.usable:
+        refused = art.error
     if art is not None and art.usable:
         index = CandidateIndex.for_artifact(art, rs.cache)
         handle = art.parquet()
@@ -226,7 +252,8 @@ def _peak_rows(rs: ResultSet, run: Run, cid: int) -> tuple[pd.DataFrame, str]:
         ],
     )
     df = pd.DataFrame(rows)
-    return df, "psms_competed rows (psms_extracted.parquet is not available in this run)"
+    why = f"refused: {refused}" if refused else "not available in this run"
+    return df, f"psms_competed rows (psms_extracted.parquet {why})"
 
 
 def _entrapment_test(rs: ResultSet, info: RescoreInfo) -> tuple[str, dict] | None:
@@ -336,11 +363,29 @@ def _evidence(rs: ResultSet, d: PrecursorDetail) -> list[EvidenceItem]:
         )
     )
     for q in d.q_values:
-        add(
-            EvidenceItem(
-                "q", q.column, q.column, q.value, "q value", f"psms_scored: {q.column}", q.text
+        # The value is the engine's; only a grouped column's winner flag is the viewer's.
+        source = f"psms_scored: {q.column}"
+        if q.grouped and q.winner_source:
+            source += f"; winner flag: {q.winner_source}"
+        add(EvidenceItem("q", q.column, q.column, q.display_value, "q value", source, q.text))
+    if d.scored_after_mbr is not None:
+        for column in ("q_value", "run_psm_q", "experiment_psm_q"):
+            after = d.scored_after_mbr.get(column)
+            native = d.scored.get(column)
+            if after is None or native is None or float(after) == float(native):
+                continue
+            add(
+                EvidenceItem(
+                    "q",
+                    f"{column}_after_mbr",
+                    f"{column} after match-between-runs",
+                    after,
+                    "q value",
+                    f"{d.run.label}/scored.parquet: {column}",
+                    "the value quant and the report used after MBR: min(native q, transfer_q); "
+                    "not the rescorer's estimate",
+                )
             )
-        )
 
     # Fragments.
     n_matched = peak.get("n_matched_fragments")
@@ -601,46 +646,70 @@ def _markers(d: PrecursorDetail) -> dict[str, Any]:
 # --------------------------------------------------------------------------- entry point
 
 
+def _guard(notes: list[str], what: str, timer: _Timer, name: str, fn, *args, **kwargs):
+    """Run an optional part; a ViewerError becomes a note and the part is None."""
+    try:
+        return timer.run(name, fn, *args, **kwargs)
+    except ViewerError as exc:
+        notes.append(f"{what} unavailable: {exc}")
+        return None
+
+
 def precursor_detail(rs: ResultSet, run: Run | str | int, candidate_id: int) -> PrecursorDetail:
-    """Assemble the precursor detail of ``candidate_id`` in ``run``."""
+    """Assemble the precursor detail of ``candidate_id`` in ``run``.
+
+    Only the scored row is required. Every other part is optional: when its artifact is
+    missing or refused, the part is None (or empty) and ``notes`` says why.
+    """
     run = rs.run(run)
     cid = int(candidate_id)
     timer = _Timer()
     notes: list[str] = []
 
-    scored = timer.run("scored", _scored_row, rs, run, cid)
+    scored, after_mbr = timer.run("scored", _scored_rows, rs, run, cid)
     info = timer.run("rescore", rescore_info, rs)
-    peaks, peaks_source = timer.run("peaks", _peak_rows, rs, run, cid)
+    found = _guard(notes, "extracted peaks", timer, "peaks", _peak_rows, rs, run, cid)
+    peaks, peaks_source = found if found is not None else (pd.DataFrame(), "none")
     selected = scored.get("selected_peak_rank")
     if selected is None:
         notes.append("the scored table has no selected_peak_rank (schema v3): peak rank 0 assumed")
         selected = 0
     selected = int(selected)
 
-    source = timer.run("chromatogram_source", ChromatogramSource.for_run, rs, run)
-    chrom = timer.run("chromatogram", source.read, cid)
+    source = _guard(
+        notes, "chromatograms", timer, "chromatogram_source", ChromatogramSource.for_run, rs, run
+    )
+    chrom = (
+        _guard(notes, "chromatograms", timer, "chromatogram", source.read, cid) if source else None
+    )
     band = chrom.band if chrom is not None else None
-    if chrom is None:
+    if chrom is None and source is not None:
         notes.append("no chromatogram rows for this candidate")
 
-    rows = timer.run("features", candidate_feature_rows, rs, run, cid, list(EVIDENCE_FEATURES))
+    rows = (
+        _guard(
+            notes,
+            "features",
+            timer,
+            "features",
+            candidate_feature_rows,
+            rs,
+            run,
+            cid,
+            list(EVIDENCE_FEATURES),
+        )
+        or []
+    )
     feats = next((r for r in rows if int(r.get("peak_rank") or 0) == selected), None)
     if feats is None:
         notes.append("no feature row for the selected peak")
 
-    try:
-        window = timer.run("window", rt_window, rs, run, cid, band=band)
-    except (AmbiguousBand, ArtifactNotFound) as exc:
-        window = None
-        notes.append(f"extraction window unavailable: {exc}")
+    window = _guard(notes, "extraction window", timer, "window", rt_window, rs, run, cid, band=band)
     if window is not None and not window.bounded:
         notes.append("the extraction window is unbounded: the run has no RT calibration here")
-
-    try:
-        tol = timer.run("tolerance", extraction_tolerance, rs, run, band=band)
-    except ViewerError as exc:
-        tol = None
-        notes.append(f"extraction tolerance unavailable: {exc}")
+    tol = _guard(
+        notes, "extraction tolerance", timer, "tolerance", extraction_tolerance, rs, run, band=band
+    )
 
     apex_pick = None
     pmz = None
@@ -651,39 +720,75 @@ def precursor_detail(rs: ResultSet, run: Run | str | int, candidate_id: int) -> 
         pmz = _finite(feats.get("precursor_mz"))
     apex = _finite(scored.get("apex_rt"))
     if pmz is not None and apex is not None and run.has("spectra_ms2"):
-        scans = timer.run("scan_table", ScanTable.for_run, rs, run)
-        apex_pick = timer.run("apex_scan", scans.apex_scan, pmz, apex)
-        if apex_pick is None:
-            notes.append("no isolation window covers the precursor m/z")
-        elif not apex_pick.exact:
-            notes.append(f"apex scan approximate: {apex_pick.label}")
+        scans = _guard(notes, "spectra", timer, "scan_table", ScanTable.for_run, rs, run)
+        if scans is not None:
+            apex_pick = timer.run("apex_scan", scans.apex_scan, pmz, apex)
+            if apex_pick is None:
+                notes.append("no isolation window covers the precursor m/z")
+            elif not apex_pick.exact:
+                notes.append(f"apex scan approximate: {apex_pick.label}")
     elif not run.has("spectra_ms2"):
         notes.append("the run has no readable spectra_ms2 table")
 
-    try:
-        quant = timer.run("quant", quant_state, rs, run, cid)
-    except ViewerError as exc:
-        quant = None
-        notes.append(f"quant state unavailable: {exc}")
+    quant = _guard(notes, "quant state", timer, "quant", quant_state, rs, run, cid)
 
     bpid = int(scored["base_peptide_id"])
-    comp, winners = timer.run(
-        "competition", competition, rs, run.index, cid, bpid, entrapment=_entrapment_test(rs, info)
+    found = _guard(
+        notes,
+        "competition",
+        timer,
+        "competition",
+        competition,
+        rs,
+        run.index,
+        cid,
+        bpid,
+        entrapment=_entrapment_test(rs, info),
     )
-    qvals = q_values(rs, scored, winners)
+    comp, winners = found if found is not None else (pd.DataFrame(), {})
+    qvals = q_values(rs, scored, winners, info=info)
 
-    partner_id = timer.run("partner", exact_partner, rs, cid)
-    if partner_id is not None:
-        partner_rows = timer.run("partner_rows", scored_rows_of, rs, partner_id)
-        partner = DecoyPartner(partner_id, partner_map(rs).reason, partner_rows)
+    lookup = _guard(
+        notes,
+        "decoy partner",
+        timer,
+        "partner",
+        exact_partner,
+        rs,
+        cid,
+        peptidoform=scored.get("peptidoform"),
+        charge=scored.get("charge"),
+    )
+    if lookup is not None and lookup.candidate_id is not None:
+        partner_rows = _guard(
+            notes,
+            "decoy partner rows",
+            timer,
+            "partner_rows",
+            scored_rows_of,
+            rs,
+            lookup.candidate_id,
+        )
+        partner_rows = partner_rows if partner_rows is not None else pd.DataFrame()
+        partner = DecoyPartner(lookup.candidate_id, lookup.reason, partner_rows)
         if partner_rows.empty:
-            notes.append(f"the exact library partner (candidate {partner_id}) was not scored")
+            notes.append(
+                f"the exact library partner (candidate {lookup.candidate_id}) was not scored"
+            )
     else:
-        partner = DecoyPartner(None, partner_map(rs).reason, pd.DataFrame())
+        partner = DecoyPartner(None, lookup.reason if lookup else "not looked up", pd.DataFrame())
 
     transfer = None
     if rs.is_experiment and mbr_ran(rs):
-        transfer = timer.run("transfer", transfer_of, rs, run.index, cid)
+        transfer = _guard(notes, "transfer", timer, "transfer", transfer_of, rs, run.index, cid)
+        if transfer is not None:
+            tq = transfer.get("transfer_q")
+            notes.append(
+                "match-between-runs transfer into this run"
+                + (f" (transfer_q {float(tq):.6g})" if tq is not None else "")
+                + ": the q values shown are the rescorer's native values; the lowered values "
+                "that quant and the report used are listed separately"
+            )
 
     peak = sel.iloc[0].to_dict() if not sel.empty else {}
     if _finite(peak.get("apex_intensity")) == 0.0:
@@ -718,6 +823,7 @@ def precursor_detail(rs: ResultSet, run: Run | str | int, candidate_id: int) -> 
         evidence=[],
         markers={},
         notes=notes,
+        scored_after_mbr=after_mbr,
     )
     detail.evidence = timer.run("evidence", _evidence, rs, detail)
     detail.markers = _markers(detail)

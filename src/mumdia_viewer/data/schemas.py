@@ -12,6 +12,7 @@ the artifact, the version found and the versions supported. It does not guess.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -339,9 +340,26 @@ def chromatogram_layout(schema: pa.Schema, *, where: str = "chromatograms") -> C
     )
 
 
+# Released schemas whose contract has no ion-mobility column; an IM column in such a file
+# means the unreleased ion-mobility layout (PR #140).
+_NO_IM_RELEASED = frozenset(
+    {"spectra_ms1", "spectra_ms2", "isolation_windows", "fragment_library_precursors", "seed_psms"}
+)
+_IM_COLUMN = re.compile(r"(^|_)im($|_)")
+
+
 def infer_version(schema_name: str, schema: pa.Schema) -> int | None:
-    """Infer the version of a file that has neither a manifest record nor a report."""
+    """Infer the version of a file that has neither a manifest record nor a report.
+
+    A file of a schema whose released versions have no ion-mobility column, but which
+    holds one, is given the newest ion-mobility version, so that it is refused unless
+    ``allow_unreleased`` is set.
+    """
     names = set(schema.names)
+    if schema_name in _NO_IM_RELEASED and any(_IM_COLUMN.search(n) for n in names):
+        versions = UNRELEASED_IM.get(schema_name)
+        if versions:
+            return max(versions)
     if schema_name == "chromatograms":
         return chromatogram_layout(schema).schema_version
     if schema_name == "psms_scored":

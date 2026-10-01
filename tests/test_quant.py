@@ -18,7 +18,9 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from mumdia_viewer.data import open_results
+from mumdia_viewer.data import mbr, open_results
+from mumdia_viewer.data import quant as Q
+from mumdia_viewer.data.artifacts import Artifact, Status
 from mumdia_viewer.data.errors import ArtifactNotFound, SchemaVersionError, ViewerError
 from mumdia_viewer.data.quant import (
     N_FEATURES_LABEL,
@@ -32,7 +34,9 @@ from mumdia_viewer.data.quant import (
     quant_state,
     quant_states,
     quant_status_breakdown,
+    transfer_relation,
 )
+from mumdia_viewer.data.schemas import VersionInfo
 from mumdia_viewer.data.tables import TableQuery, identification_table
 
 
@@ -369,6 +373,139 @@ def test_mbr_without_accepted_transfers(tmp_path, fixture_dir):
     states = quant_states(rs, "c", page.rows.loc[page.rows["run"] == "c", "candidate_id"])
     assert not states["from_transfer"].any()
     assert int(lfq_matrix(rs, "precursor", wide=False)["n_transferred"].sum()) == 0
+    breakdown = quant_status_breakdown(rs)
+    assert (breakdown["n_transferred"] == 0).all()
+
+
+# --------------------------------------------------------------------------- stale MBR files
+
+
+def _stale_mbr_copy(tmp_path: Path, fixture_dir, in_extra: bool):
+    """The experiment fixture (experiment.mbr 'None') plus the mbr fixture's MBR tables.
+
+    A later run without MBR into a directory that held an MBR run leaves both files
+    (run_experiment.rs deletes them only in the MBR branch). ``in_extra`` puts the stale
+    mbr_transferred.parquet into ``rs.extra`` (as an older discovery did) or keeps it
+    out, so the functions are checked either way.
+    """
+    root = _copy(tmp_path, fixture_dir, "experiment")
+    for name in ("mbr_transferred.parquet", "scored_mbr.parquet"):
+        shutil.copy2(fixture_dir("mbr") / name, root / name)
+    rs = open_results(root)
+    if in_extra and rs.artifact("mbr_transferred") is None:
+        rs.extra["mbr_transferred"] = Artifact(
+            kind="mbr_transferred",
+            key="mbr_transferred",
+            path=root / "mbr_transferred.parquet",
+            status=Status.PRESENT,
+            version=VersionInfo("mbr_transferred", None, "unrecorded"),
+        )
+    elif not in_extra:
+        rs.extra.pop("mbr_transferred", None)
+    assert (rs.artifact("mbr_transferred") is not None) == in_extra
+    return rs
+
+
+@pytest.mark.parametrize("in_extra", [True, False])
+def test_stale_mbr_files_flag_no_transfer(tmp_path, fixture_dir, open_fixture, in_extra):
+    """A stale mbr_transferred.parquet is never read as this experiment's transfers.
+
+    Review semantics #1: quant.mbr_ran returned True on the file alone, so the tables,
+    the quant gate, the quant states, protein quant and LFQ flagged 16 rows of run a as
+    transfers. Only the manifest decides (mbr.mbr_ran).
+    """
+    rs = _stale_mbr_copy(tmp_path, fixture_dir, in_extra)
+    plain = open_fixture("experiment")
+    # The stale table does name (source, candidate_id) pairs of this experiment.
+    stale = _read(tmp_path / "experiment" / "mbr_transferred.parquet")
+    scored = _read(rs.scored.path)
+    pairs = set(zip(scored["source"], scored["candidate_id"], strict=True))
+    assert any(p in pairs for p in zip(stale["source"], stale["candidate_id"], strict=True))
+    assert Q.mbr_ran is mbr.mbr_ran
+    assert not Q.mbr_ran(rs) and not mbr.mbr_ran(rs)
+    assert transfer_relation(rs) is None
+    for run in rs.runs:
+        gate = quant_gate(rs, run.name)
+        assert not gate.transfers_admitted
+        assert "transfer" not in gate.label and "transfer" not in gate.note
+        own = scored[scored["source"] == run.index]
+        states = quant_states(rs, run.name, own["candidate_id"].to_numpy())
+        assert not states["from_transfer"].any()
+        assert states["transfer_q"].isna().all() and states["native_q"].isna().all()
+        assert not states["reason"].str.contains("transfer").any()
+        expected = quant_states(plain, run.name, own["candidate_id"].to_numpy())
+        pd.testing.assert_frame_equal(states, expected)
+        for group in _read(run.artifact("protein_group_quant").path)["protein_group"]:
+            got = protein_quant(rs, run.name, group)
+            assert got is not None and "n_transferred_precursors" not in got
+    for level in ("protein", "peptide", "precursor"):
+        for wide in (True, False):
+            lfq = lfq_matrix(rs, level, wide=wide)
+            assert not [c for c in lfq.columns if "transferred" in c]
+            assert "Match-between-runs" not in lfq.attrs["description"]
+    breakdown = quant_status_breakdown(rs)
+    assert "n_transferred" not in breakdown.columns
+    assert not any("Match-between-runs" in n for n in breakdown.attrs["notes"])
+    queries = [
+        TableQuery(threshold=None, include_decoys=True, limit=1000),
+        TableQuery(run="a", threshold=None, limit=1000),
+        TableQuery(run="b"),
+        TableQuery(unit="peptide", threshold=None),
+        TableQuery(unit="protein_group", threshold=None),
+    ]
+    for query in queries:
+        page = identification_table(rs, query)
+        banned = {"is_transferred", "transfer_q", "n_runs_transfer_only"}
+        assert not banned & set(page.rows.columns), query
+        assert "Match-between-runs" not in page.description, query
+        assert not any("transfer" in label for label in page.column_labels.values()), query
+        same = identification_table(plain, query)
+        assert page.description == same.description, query
+        pd.testing.assert_frame_equal(page.rows, same.rows, obj=repr(query))
+
+
+def test_status_breakdown_counts_mbr_transfers(open_fixture):
+    """Review semantics #3: the 'quantified' rows of an MBR run include its transfers."""
+    rs = open_fixture("mbr")
+    breakdown = quant_status_breakdown(rs)
+    assert list(breakdown.columns) == [
+        "run",
+        "table",
+        "status",
+        "n",
+        "n_transferred",
+        "description",
+    ]
+    transfers = _read(rs.artifact("mbr_transferred").path)
+    for run in rs.runs:
+        moved = set(transfers.loc[transfers["source"] == run.index, "candidate_id"])
+        pqt = _read(run.artifact("peptide_quant").path)
+        pgq = _read(run.artifact("protein_group_quant").path)
+        in_pqt = pqt["candidate_id"].isin(moved)
+        groups = set(pqt.loc[in_pqt, "protein_group"])
+        expected = {
+            "peptide_quant": pqt.assign(tr=in_pqt).groupby("quant_status")["tr"].sum(),
+            "protein_group_quant": pgq.assign(tr=pgq["protein_group"].isin(groups))
+            .groupby("quant_status")["tr"]
+            .sum(),
+        }
+        for kind, want in expected.items():
+            sub = breakdown[(breakdown["run"] == run.name) & (breakdown["table"] == kind)]
+            got = dict(zip(sub["status"], sub["n_transferred"].astype(int), strict=True))
+            assert got == {k: int(v) for k, v in want.items()}, (run.name, kind)
+    quantified = breakdown[
+        (breakdown["table"] == "peptide_quant") & (breakdown["status"] == "quantified")
+    ].set_index("run")
+    # G3 F8.3: 16 of run a's 151 quantified rows and 32 of run c's 150 are transfers.
+    assert quantified.loc["a", ["n", "n_transferred"]].tolist() == [151, 16]
+    assert quantified.loc["c", ["n", "n_transferred"]].tolist() == [150, 32]
+    groups = breakdown[breakdown["table"] == "protein_group_quant"]
+    assert (groups["n_transferred"] > 0).any()
+    assert "mbr_transferred.parquet" in breakdown.attrs["labels"]["n_transferred"]
+    notes = " ".join(breakdown.attrs["notes"])
+    assert "include transfers" in notes and "mbr_transferred.parquet" in notes
+    # Without MBR the column is absent.
+    assert "n_transferred" not in quant_status_breakdown(open_fixture("experiment")).columns
 
 
 # --------------------------------------------------------------------------- LFQ

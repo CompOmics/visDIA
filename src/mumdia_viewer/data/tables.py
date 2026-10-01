@@ -10,7 +10,10 @@ Row units:
   ``protein_group``). The filters (label, q column and threshold, charge, protein,
   modification, search, quant status) select scored rows, and a key is in the table
   when at least one of its rows passes them. The total is therefore
-  ``COUNT(DISTINCT key)`` over the passing rows, the same count as the overview's. The
+  ``COUNT(DISTINCT key)`` over the passing rows, the same count as the overview's; in
+  entrapment mode the table keeps the spike-in targets (flagged ``is_entrapment``, by
+  the spike-in test of :func:`.entrapment.count_classes`), which the overview's counts
+  exclude, and the description gives both numbers. The
   row shown for a key is its winning row when that row passes the filters; otherwise it
   is the best passing row, and ``is_winner`` is False. The winning row is the engine's
   (``grouped_q`` in rescore.rs): the only row of the group whose grouped q is below 1.0,
@@ -32,6 +35,9 @@ row number, one table per sort), and the rows of a page are then read back by ro
 number. Every cached table holds all that its pages need, so evicting one table never
 breaks another. These are ordinary tables, not TEMP tables: a TEMP table is private to
 the cursor that made it, and every thread has its own cursor.
+
+A DuckDB failure of a table query (for example out of memory on a very large result)
+raises :class:`ViewerError`, which names the query and the size of its result.
 """
 
 from __future__ import annotations
@@ -44,26 +50,26 @@ from collections import OrderedDict
 from dataclasses import dataclass, field, fields, replace
 from typing import Any, Literal
 
+import duckdb
 import numpy as np
 import pandas as pd
 
 from .discovery import ResultSet, Run
 from .duck import sql_ident, sql_path
+from .entrapment import count_classes, spike_in_condition
 from .errors import ViewerError
 from .quant import (
     STRIP_SQL,
     QuantGate,
-    entrapment_condition,
     mbr_ran,
     quant_gate,
     quant_relation,
     quant_table_problems,
     resolve_run,
-    run_entrapment_condition,
     table_problem,
     transfer_relation,
 )
-from .rescore import rescore_info
+from .rescore import precursor_q_is_precursor_unit, rescore_info
 
 Unit = Literal["precursor", "peptide", "protein_group"]
 
@@ -194,8 +200,23 @@ def _clean_text(value: str | None) -> str | None:
     return value or None
 
 
-def _q_text(column: str, experiment: bool, entrapment: bool) -> str:
-    """What a q column estimates, in words."""
+def _base_peptide_caveat(group_by: str) -> str:
+    """Why precursor_q counts are a base-peptide unit under base-peptide competition."""
+    return (
+        f"compete.group_by = {group_by} kept about one form per base peptide, so a count "
+        "on precursor_q approximates a base-peptide count, not a count of every precursor"
+    )
+
+
+def _q_text(
+    column: str, experiment: bool, entrapment: bool, base_peptide: str | None = None
+) -> str:
+    """What a q column estimates, in words.
+
+    ``base_peptide`` is the ``compete.group_by`` value when competition kept about one
+    form per base peptide (:func:`.rescore.precursor_q_is_precursor_unit` is False), else
+    None.
+    """
     if column == "q_value":
         text = (
             "q_value is the PSM-level q pooled over all runs (not a per-run FDR)"
@@ -216,6 +237,8 @@ def _q_text(column: str, experiment: bool, entrapment: bool) -> str:
             )
         else:
             text += "; in a single run it equals q_value on every target row"
+        if base_peptide is not None:
+            text += "; " + _base_peptide_caveat(base_peptide)
     elif column == "peptide_q_value":
         text = (
             "peptide_q_value is the picked target-decoy q per base_peptide_id, set on the "
@@ -338,6 +361,8 @@ class _Context:
     run: Run | None
     large: bool
     stamps: tuple[Any, ...]
+    # compete.group_by when competition kept about one form per base peptide, else None.
+    base_peptide: str | None = None
     notes: list[str] = field(default_factory=list)
 
     @property
@@ -380,9 +405,11 @@ def _stamps(rs: ResultSet) -> tuple[Any, ...]:
             art = run.artifact(kind)
             if art is not None and art.usable:
                 out.append((run.index, kind, art.parquet().stamp))
-    tr = rs.artifact("mbr_transferred")
-    if tr is not None and tr.usable:
-        out.append(("mbr", tr.parquet().stamp))
+    if mbr_ran(rs):
+        # Only a transfer table that this experiment's MBR wrote is read (quant.transfer_relation).
+        tr = rs.artifact("mbr_transferred")
+        if tr is not None and tr.usable:
+            out.append(("mbr", tr.parquet().stamp))
     return tuple(out)
 
 
@@ -431,6 +458,9 @@ def _validate(rs: ResultSet, query: TableQuery) -> _Context:
     if query.charge is not None and not _is_int(query.charge):
         raise ViewerError("charge must be an integer.")
     info = rescore_info(rs)
+    base_peptide = None
+    if not precursor_q_is_precursor_unit(info):
+        base_peptide = str(info.group_by)
     return _Context(
         rs=rs,
         query=query,
@@ -444,30 +474,16 @@ def _validate(rs: ResultSet, query: TableQuery) -> _Context:
         run=run,
         large=handle.num_rows >= MATERIALISE_MIN_ROWS,
         stamps=_stamps(rs),
+        base_peptide=base_peptide,
     )
 
 
 # --------------------------------------------------------------------------- entrapment
 
 
-def entrapment_sql(
-    marker: str | None,
-    exclude: str | None = None,
-    contaminants: list[str] | tuple[str, ...] = (),
-    alias: str = "w",
-) -> SqlFragment:
-    """True on entrapment (spike-in) rows, by the engine's rule (rescore.rs).
-
-    A non-decoy row is entrapment when its protein string contains ``marker``, does not
-    contain ``exclude`` and contains none of the ``contaminants`` (case-sensitive
-    substrings). Without a marker no row is entrapment.
-    """
-    text, params = entrapment_condition(marker, exclude, tuple(contaminants or ()), alias)
-    return SqlFragment(text, *params)
-
-
 def _entrapment_expr(rs: ResultSet, alias: str) -> SqlFragment:
-    text, params = run_entrapment_condition(rs, alias)
+    """True on spike-in rows: the test of the identification counts (count_classes)."""
+    text, params = spike_in_condition(rs, alias)
     return SqlFragment(text, *params)
 
 
@@ -499,24 +515,22 @@ def winner_sql(
 
 
 def _entrapment_label(ctx: _Context) -> str | None:
-    """The is_entrapment column label in entrapment mode, or None when rows cannot be flagged."""
+    """The is_entrapment column label in entrapment mode, or None when rows cannot be flagged.
+
+    The rows are the spike-ins of the identification counts (:func:`.count_classes`):
+    the same settings (:func:`.entrapment.settings_for`) and the same test.
+    """
     if not ctx.entrapment:
         return None
-    marker = ctx.rs.config_get("rescore", "entrapment_marker")
-    if not marker:
+    cls = count_classes(ctx.rs)
+    settings = cls.settings
+    if not cls.spike_present:
         ctx.note(
-            "Entrapment mode, but no rescore.entrapment_marker is recorded; spike-in rows "
-            "cannot be flagged."
+            f"Entrapment mode, but no target protein contains the marker '{settings.marker}' "
+            f"({settings.source}); spike-in rows cannot be flagged."
         )
         return None
-    exclude = ctx.rs.config_get("rescore", "entrapment_exclude")
-    tokens = ctx.rs.config_get("rescore", "entrapment_contaminant_markers", default=[]) or []
-    label = f"entrapment spike-in by the engine rule: a target whose protein contains {marker!r}"
-    if exclude:
-        label += f", not {exclude!r}"
-    if tokens:
-        label += ", and none of " + ", ".join(repr(t) for t in tokens)
-    return label
+    return f"entrapment spike-in: a {settings.rule}; settings: {settings.source}"
 
 
 # --------------------------------------------------------------------------- quant gate
@@ -1214,7 +1228,7 @@ def _labels(ctx: _Context, columns: list[str]) -> dict[str, str]:
         labels["is_entrapment"] = ent_label
     for c in Q_COLUMNS:
         if c in ctx.scored_names:
-            labels.setdefault(c, _q_text(c, ctx.experiment, ctx.entrapment))
+            labels.setdefault(c, _q_text(c, ctx.experiment, ctx.entrapment, ctx.base_peptide))
     return labels
 
 
@@ -1232,8 +1246,21 @@ def _describe(ctx: _Context, total: int, flags: dict[str, int], words: list[str]
     if words:
         text += ", " + ", ".join(words)
     text += "."
-    if q.threshold is not None and ctx.q_column is not None:
-        text += " " + _q_text(ctx.q_column, ctx.experiment, ctx.entrapment) + "."
+    q_text_shown = q.threshold is not None and ctx.q_column is not None
+    if q_text_shown:
+        assert ctx.q_column is not None
+        text += " " + _q_text(ctx.q_column, ctx.experiment, ctx.entrapment, ctx.base_peptide)
+        text += "."
+    if (
+        q.unit == "precursor"
+        and ctx.base_peptide is not None
+        and not (q_text_shown and ctx.q_column == "precursor_q")
+    ):
+        text += (
+            f" compete.group_by = {ctx.base_peptide} kept about one form per base peptide, "
+            "so these rows approximate base peptides, not every precursor, and a count on "
+            "precursor_q approximates a base-peptide count."
+        )
     if ctx.grouped:
         group = GROUP_NOUN[q.unit]
         uq = UNIT_Q_COLUMN[q.unit]
@@ -1289,10 +1316,13 @@ def _describe(ctx: _Context, total: int, flags: dict[str, int], words: list[str]
             "entrapment spike-ins are targets by label"
         )
         if "is_entrapment" in flags:
+            n_spike = flags["is_entrapment"]
             text += (
-                f"; is_entrapment flags them ({flags['is_entrapment']:,} of the {total:,} rows), "
+                f"; is_entrapment flags them ({n_spike:,} of the {total:,} rows), "
                 "and the engine's own target counts exclude them"
             )
+            if not q.include_decoys or ctx.grouped:
+                text += f"; the other {total - n_spike:,} rows are real targets"
         text += "."
     if _has_quant(ctx):
         gate_text = _gate_sentence(ctx)
@@ -1437,10 +1467,22 @@ def _page(rs: ResultSet, query: TableQuery, ctx: _Context, cache: _TableCache) -
             + "."
         )
     key = (query.signature(), ctx.q_column, ctx.stamps)
-    if ctx.large:
-        rows, total, flags = _cached_page(rs, plan, key, query, cache)
-    else:
-        rows, total, flags = _direct_page(rs, plan, key, query)
+    try:
+        if ctx.large:
+            rows, total, flags = _cached_page(rs, plan, key, query, cache)
+        else:
+            rows, total, flags = _direct_page(rs, plan, key, query)
+    except duckdb.Error as exc:
+        known = rs._memo.get(("tables", "total", *key))
+        size = (
+            f"a result of {int(known):,} rows, from a scored table of {ctx.scored_rows:,} rows"
+            if known is not None
+            else f"a scored table of {ctx.scored_rows:,} rows (the result was not yet counted)"
+        )
+        raise ViewerError(
+            f"The {query.unit} table query failed on {size}: {type(exc).__name__}: {exc}. "
+            f"Query: {query!r}."
+        ) from exc
     return TablePage(
         rows=rows[columns].reset_index(drop=True),
         total=int(total),

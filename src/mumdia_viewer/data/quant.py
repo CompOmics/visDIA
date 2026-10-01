@@ -13,7 +13,9 @@ What the engine writes (MuMDIA 0.5.0):
   ``PsmQ`` (the pooled ``q_value``) for every run and records the substitution in
   ``experiment.quant_q_filter = {configured, effective}``.
 * No quant or LFQ table flags match-between-runs (MBR) transfers. They are flagged here
-  by joining ``mbr_transferred.parquet`` on ``(source, candidate_id)``.
+  by joining ``mbr_transferred.parquet`` on ``(source, candidate_id)``, and only when the
+  experiment manifest records that MBR ran (:func:`.mbr.mbr_ran`). A transfer table left
+  over from an earlier run into the same directory is never used.
 * The LFQ tables are dense: one row per key and run. An LFQ ``quantity`` of 0.0 means
   that the run has no feature for the key (missing), not a zero abundance; it is
   returned as NaN.
@@ -41,7 +43,9 @@ import pyarrow as pa
 from .artifacts import Artifact
 from .discovery import RUN_FILES, ResultSet, Run
 from .duck import sql_ident, sql_path
+from .entrapment import spike_in_condition
 from .errors import ArtifactNotFound, ViewerError
+from .mbr import mbr_info, mbr_ran
 from .reports import normalise_enum
 from .rescore import rescore_info
 
@@ -226,34 +230,26 @@ def run_scored(rs: ResultSet, run: Run) -> tuple[Artifact, bool]:
 
 # --------------------------------------------------------------------------- MBR
 
-
-def mbr_ran(rs: ResultSet) -> bool:
-    """True when match-between-runs ran for this experiment (even with 0 transfers).
-
-    ``experiment.mbr`` (or ``model_identities.mbr``) is the configured strategy; any
-    value other than ``"None"`` means that the MBR worker ran.
-    """
-    if not rs.is_experiment:
-        return False
-    exp = rs.manifest.experiment or {}
-    value = exp.get("mbr", rs.manifest.model_identities.get("mbr"))
-    if value is not None and normalise_enum(value) not in ("", "none", "null"):
-        return True
-    if rs.artifact("mbr_transferred") is not None:
-        return True
-    sfq = rs.scored_for_quant
-    return bool(sfq is not None and sfq.usable and sfq.parquet().has_column("is_transferred"))
+# ``mbr_ran`` is :func:`.mbr.mbr_ran`, imported above: only the manifest says whether
+# match-between-runs ran (``experiment.mbr``, else ``model_identities.mbr``). A
+# ``mbr_transferred.parquet`` or ``scored_mbr.parquet`` left over from an earlier run into
+# the same directory is not a signal, and no function of this module reads it.
 
 
 def transfer_relation(rs: ResultSet) -> tuple[str, list[Any]] | None:
     """SQL selecting ``(source, candidate_id, transfer_q)``, one row per accepted transfer.
 
-    The source is ``mbr_transferred.parquet`` (a pair accepted twice keeps its last row,
-    as the worker does). Without that file the flagged rows of ``scored_for_quant``
-    (``scored_mbr.parquet``) are used. None when neither exists. A NaN ``transfer_q`` is
-    returned as null.
+    None unless match-between-runs ran (:func:`.mbr.mbr_ran`): a transfer table left
+    over from an earlier run into the same directory is never read. When MBR ran, the
+    source is the transfer table of :func:`.mbr.mbr_info`, ``mbr_transferred.parquet``
+    (a pair accepted twice keeps its last row, as the worker does). Without that file
+    the flagged rows of ``scored_for_quant`` (``scored_mbr.parquet``) are used; None
+    when neither can be read. A NaN ``transfer_q`` is returned as null.
     """
-    art = rs.artifact("mbr_transferred")
+    info = mbr_info(rs)
+    if not info.ran:
+        return None
+    art = info.transfers
     if _usable(art):
         assert art is not None
         art.parquet()
@@ -265,7 +261,7 @@ def transfer_relation(rs: ResultSet) -> tuple[str, list[Any]] | None:
             "WHERE source IS NOT NULL AND candidate_id IS NOT NULL GROUP BY 1, 2"
         )
         return sql, [sql_path(art.require())]
-    sfq = rs.scored_for_quant
+    sfq = info.scored_for_quant
     if sfq is not None and sfq.usable and sfq.parquet().has_column("is_transferred"):
         tq = "transfer_q" if sfq.parquet().has_column("transfer_q") else "NULL::DOUBLE"
         sql = (
@@ -553,41 +549,6 @@ _GROUP_COLUMNS: dict[str, tuple[str, ...]] = {
     "precursor_q": ("peptidoform", "charge"),
     "pg_q_value": ("protein_group",),
 }
-
-
-def entrapment_condition(
-    marker: str | None,
-    exclude: str | None = None,
-    contaminants: Sequence[str] = (),
-    alias: str = "w",
-) -> tuple[str, list[Any]]:
-    """SQL (and parameters) that is true on entrapment (spike-in) rows, by the engine's rule.
-
-    A non-decoy row is entrapment when its protein string contains ``marker``, does not
-    contain ``exclude`` and contains none of the ``contaminants`` (case-sensitive
-    substrings; ``stages/rescore.rs``). Without a marker no row is entrapment.
-    """
-    if not marker:
-        return "false", []
-    text = f"({alias}.label <> 'decoy' AND contains({alias}.protein, ?)"
-    params: list[Any] = [str(marker)]
-    if exclude:
-        text += f" AND NOT contains({alias}.protein, ?)"
-        params.append(str(exclude))
-    for token in contaminants or ():
-        text += f" AND NOT contains({alias}.protein, ?)"
-        params.append(str(token))
-    return text + ")", params
-
-
-def run_entrapment_condition(rs: ResultSet, alias: str) -> tuple[str, list[Any]]:
-    """:func:`entrapment_condition` with the markers of the run's ``rescore`` configuration."""
-    return entrapment_condition(
-        rs.config_get("rescore", "entrapment_marker"),
-        rs.config_get("rescore", "entrapment_exclude"),
-        list(rs.config_get("rescore", "entrapment_contaminant_markers", default=[]) or []),
-        alias,
-    )
 
 
 def _clean(value: Any) -> Any:
@@ -964,7 +925,8 @@ def quant_states(
             "AND s.label <> 'decoy' AND isfinite(s.gate_q) AND s.gate_q > ?)"
         )
         params.append(float(gate.threshold))
-        tie_sql, tie_params = run_entrapment_condition(rs, "p") if entrapment else ("false", [])
+        # The spike-in test of the identification counts (entrapment.count_classes).
+        tie_sql, tie_params = spike_in_condition(rs, "p") if entrapment else ("false", [])
         on_keys = " AND ".join(f"wk.{k} = p.{k}" for k in keys)
         ctes.append(
             "g AS (SELECT p.file_row_number AS rn, p.source, p.candidate_id, p.label, p.score, "
@@ -1242,6 +1204,57 @@ def protein_quant(
     return out
 
 
+def _transfer_source(rs: ResultSet) -> str:
+    """The file that :func:`transfer_relation` reads, by name."""
+    info = mbr_info(rs)
+    if _usable(info.transfers):
+        return "mbr_transferred.parquet"
+    sfq = info.scored_for_quant
+    name = sfq.path.name if sfq is not None and sfq.path is not None else "scored_for_quant"
+    return f"is_transferred of {name}"
+
+
+def _status_counts(
+    rs: ResultSet,
+    run: Run,
+    kind: str,
+    art: Artifact,
+    transfers: tuple[str, list[Any]] | None,
+    peptide_table: Artifact | None,
+) -> list[tuple[Any, int, int | None]]:
+    """(quant_status, rows, transferred rows or None) of one quant table of one run.
+
+    ``peptide_quant`` rows are transfers when their ``(source, candidate_id)`` is in the
+    transfer relation. A ``protein_group_quant`` row counts when the group holds such a
+    row in the run's ``peptide_quant`` (any quantity). None when there is no transfer
+    relation, or when the run's peptide_quant cannot be read for a protein table.
+    """
+    path = sql_path(art.require())
+    if transfers is None or (kind == "protein_group_quant" and peptide_table is None):
+        rows = rs.duck.rows(
+            "SELECT quant_status, count(*) FROM read_parquet(?) GROUP BY 1 ORDER BY 1", [path]
+        )
+        return [(status, int(n), None) for status, n in rows]
+    t_sql, t_params = transfers
+    moved = f"(SELECT candidate_id FROM ({t_sql}) WHERE source = ?)"
+    if kind == "peptide_quant":
+        rows = rs.duck.rows(
+            "SELECT q.quant_status, count(*), count(t.candidate_id) FROM read_parquet(?) q "
+            f"LEFT JOIN {moved} t ON t.candidate_id = q.candidate_id GROUP BY 1 ORDER BY 1",
+            [path, *t_params, int(run.index)],
+        )
+    else:
+        assert peptide_table is not None
+        rows = rs.duck.rows(
+            "WITH tg AS (SELECT DISTINCT q.protein_group FROM read_parquet(?) q "
+            f"JOIN {moved} t ON t.candidate_id = q.candidate_id) "
+            "SELECT g.quant_status, count(*), count(tg.protein_group) FROM read_parquet(?) g "
+            "LEFT JOIN tg ON tg.protein_group = g.protein_group GROUP BY 1 ORDER BY 1",
+            [sql_path(peptide_table.require()), *t_params, int(run.index), path],
+        )
+    return [(status, int(n), int(n_tr)) for status, n, n_tr in rows]
+
+
 def quant_status_breakdown(rs: ResultSet) -> pd.DataFrame:
     """Rows per ``quant_status`` of every run's ``peptide_quant`` and ``protein_group_quant``.
 
@@ -1249,10 +1262,21 @@ def quant_status_breakdown(rs: ResultSet) -> pd.DataFrame:
     counts of the engine's own rows; scored rows without a quant row (not selected) are
     not part of either table. A table that cannot be read (absent, or an unsupported
     schema version) has no rows here; ``attrs['notes']`` names it and says why.
+
+    When match-between-runs ran (:func:`.mbr.mbr_ran`), quant admits every transfer
+    whatever its q and no quant table flags it, so the rows of each status include the
+    transfers. ``n_transferred`` (after ``n``, derived) then counts them: the
+    ``peptide_quant`` rows whose ``(source, candidate_id)`` is an accepted transfer in
+    ``mbr_transferred.parquet``, and the ``protein_group_quant`` groups that contain
+    such a row. It is missing (NA) when no transfer table can be read. The column labels
+    are in ``attrs['labels']``.
     """
     records: list[dict[str, Any]] = []
     notes: list[str] = []
+    ran = mbr_ran(rs)
+    transfers = transfer_relation(rs) if ran else None
     for run in rs.runs:
+        peptide_table: Artifact | None = None
         for kind in ("peptide_quant", "protein_group_quant"):
             art = run.artifact(kind)
             problem = table_problem(rs, run, kind)
@@ -1261,21 +1285,46 @@ def quant_status_breakdown(rs: ResultSet) -> pd.DataFrame:
                 continue
             assert art is not None
             art.parquet()
-            for status, n in rs.duck.rows(
-                "SELECT quant_status, count(*) FROM read_parquet(?) GROUP BY 1 ORDER BY 1",
-                [sql_path(art.require())],
-            ):
-                records.append(
-                    {
-                        "run": run.name,
-                        "table": kind,
-                        "status": status,
-                        "n": int(n),
-                        "description": describe_status(status, kind),
-                    }
+            if kind == "peptide_quant":
+                peptide_table = art
+            elif ran and transfers is not None and peptide_table is None:
+                notes.append(
+                    f"{run.label} protein_group_quant: n_transferred is missing, because the "
+                    "run's peptide_quant cannot be read."
                 )
-    out = pd.DataFrame.from_records(records, columns=["run", "table", "status", "n", "description"])
+            for status, n, n_tr in _status_counts(rs, run, kind, art, transfers, peptide_table):
+                record = {"run": run.name, "table": kind, "status": status, "n": n}
+                if ran:
+                    record["n_transferred"] = n_tr
+                record["description"] = describe_status(status, kind)
+                records.append(record)
+    columns = ["run", "table", "status", "n", "description"]
+    labels = {"n": "rows of the table with this quant_status (engine rows)"}
+    if ran:
+        columns.insert(4, "n_transferred")
+        source = _transfer_source(rs) if transfers is not None else "no readable transfer table"
+        labels["n_transferred"] = (
+            "rows of n that are match-between-runs transfers (derived from "
+            f"{source}): peptide_quant rows whose (source, candidate_id) is an accepted "
+            "transfer; protein groups that contain such a peptide_quant row of the run"
+        )
+        if transfers is None:
+            notes.append(
+                "Match-between-runs ran, but no transfer table can be read "
+                "(mbr_transferred.parquet, or is_transferred in scored_for_quant), so the "
+                "transfers in these counts cannot be counted; n_transferred is missing."
+            )
+        else:
+            notes.append(
+                "Match-between-runs ran: quant admits every transfer whatever its q, and no "
+                "quant table flags it, so the counts of each status include transfers. "
+                f"n_transferred counts them (derived from {source})."
+            )
+    out = pd.DataFrame.from_records(records, columns=columns)
+    if ran:
+        out["n_transferred"] = out["n_transferred"].astype("Int64")
     out.attrs["notes"] = notes
+    out.attrs["labels"] = labels
     return out
 
 

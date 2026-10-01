@@ -37,7 +37,9 @@ beside ``target_peptides_at_1pct``), so the peptide unit is the headline
 columns are experiment-wide and are never used per run.
 
 :func:`count_classes` gives the SQL predicates of the classes that the identification
-counts use (:mod:`.counts`, :mod:`.mbr`).
+counts use (:mod:`.counts`, :mod:`.mbr`). :func:`spike_in_condition` is the same
+spike-in test with positional parameters, for the identification tables and the quant
+states, so every module flags the same rows.
 """
 
 from __future__ import annotations
@@ -65,11 +67,13 @@ __all__ = [
     "class_sql",
     "count_classes",
     "entrapment_expr",
+    "entrapment_expr_positional",
     "entrapment_fdp",
     "fdp_value",
     "markers_present",
     "markers_recorded",
     "settings_for",
+    "spike_in_condition",
     "sql_literal",
 ]
 
@@ -234,8 +238,21 @@ def sql_literal(text: str) -> str:
     return "'" + str(text).replace("'", "''") + "'"
 
 
+def _spike_tests(settings: EntrapmentSettings) -> list[tuple[str, str, bool]]:
+    """The substring tests of the spike-in rule: (parameter name, string, negated)."""
+    values: list[tuple[str, str, bool]] = [("ent_marker", settings.marker, False)]
+    if settings.exclude:
+        values.append(("ent_exclude", settings.exclude, True))
+    values += [(f"ent_c{i}", c, True) for i, c in enumerate(settings.contaminants)]
+    return values
+
+
+def _column(alias: str | None, name: str) -> str:
+    return f"{alias}.{name}" if alias else name
+
+
 def entrapment_expr(
-    settings: EntrapmentSettings, *, inline: bool = False
+    settings: EntrapmentSettings, *, inline: bool = False, alias: str | None = None
 ) -> tuple[str, dict[str, Any]]:
     """The spike-in test as a SQL boolean over ``label`` and ``protein``, with its parameters.
 
@@ -243,19 +260,33 @@ def entrapment_expr(
     SQL text. One ``NOT contains`` test per contaminant token is the same rule as the
     engine's "matches none of the tokens", and it needs no list parameter. With
     ``inline=True`` the strings are written as literals and no parameter is returned;
-    that form is only for SQL shown to the user.
+    that form is only for SQL shown to the user. ``alias`` qualifies the two columns
+    (``s.label``, ``s.protein``).
     """
-    values: list[tuple[str, str, bool]] = [("ent_marker", settings.marker, False)]
-    if settings.exclude:
-        values.append(("ent_exclude", settings.exclude, True))
-    values += [(f"ent_c{i}", c, True) for i, c in enumerate(settings.contaminants)]
-    parts = ["label = 'target'"]
+    parts = [f"{_column(alias, 'label')} = 'target'"]
     params: dict[str, Any] = {}
-    for name, value, negate in values:
+    for name, value, negate in _spike_tests(settings):
         arg = sql_literal(value) if inline else f"${name}"
-        parts.append(("NOT " if negate else "") + f"contains(protein, {arg})")
+        parts.append(("NOT " if negate else "") + f"contains({_column(alias, 'protein')}, {arg})")
         if not inline:
             params[name] = value
+    return "(" + " AND ".join(parts) + ")", params
+
+
+def entrapment_expr_positional(
+    settings: EntrapmentSettings, *, alias: str | None = None
+) -> tuple[str, list[Any]]:
+    """:func:`entrapment_expr` with positional ``?`` parameters, in textual order.
+
+    For SQL that is built with positional parameters (the identification tables and the
+    quant states). The test is the same: the same columns, the same strings, the same
+    order.
+    """
+    parts = [f"{_column(alias, 'label')} = 'target'"]
+    params: list[Any] = []
+    for _, value, negate in _spike_tests(settings):
+        parts.append(("NOT " if negate else "") + f"contains({_column(alias, 'protein')}, ?)")
+        params.append(value)
     return "(" + " AND ".join(parts) + ")", params
 
 
@@ -290,20 +321,25 @@ def markers_present(rs: ResultSet, settings: EntrapmentSettings | None = None) -
 
     The entrapment FDP is shown only then: without spike-ins the formula prints only
     the pseudocount floor 1/R, which means nothing.
+
+    The test is a full aggregate over ``label`` and ``protein``. A query that stops its
+    scan early (``LIMIT 1``) leaves the parquet reader open on the thread's DuckDB
+    cursor until the cursor runs its next statement, and on Windows that open file
+    blocks the engine from replacing the table.
     """
     settings = settings or settings_for(rs)
     key = ("entrapment_markers_present", rs.scored.identity(), settings.marker)
     if key in rs._memo:
         return bool(rs._memo[key])
-    row = execute_bound(
+    rows = execute_bound(
         rs.duck,
-        "SELECT count(*) FROM (SELECT 1 FROM read_parquet($path) "
-        "WHERE label = 'target' AND contains(protein, $marker) LIMIT 1)",
+        "SELECT count(*) FILTER (WHERE label = 'target' AND contains(protein, $marker)) > 0 "
+        "FROM read_parquet($path)",
         {"path": sql_path(rs.scored.require()), "marker": settings.marker},
-    ).fetchone()
-    found = row[0] if row is not None else 0
-    rs._memo[key] = bool(found)
-    return bool(found)
+    ).fetchall()
+    found = bool(rows[0][0]) if rows else False
+    rs._memo[key] = found
+    return found
 
 
 @dataclass(frozen=True)
@@ -410,6 +446,21 @@ def count_classes(rs: ResultSet) -> CountClasses:
     )
     rs._memo[key] = classes
     return classes
+
+
+def spike_in_condition(rs: ResultSet, alias: str | None = None) -> tuple[str, list[Any]]:
+    """The spike-in predicate of :func:`count_classes`, with positional parameters.
+
+    The same test on the same rows as ``count_classes(rs).spike`` (the settings of
+    :func:`settings_for`), written for SQL that binds ``?`` parameters in textual order;
+    ``alias`` qualifies ``label`` and ``protein``. ``'false'`` when no target protein
+    contains the marker. The identification tables and the quant states use it, so they
+    flag the rows that the counts classify as spike-ins.
+    """
+    cls = count_classes(rs)
+    if not cls.spike_present:
+        return "false", []
+    return entrapment_expr_positional(cls.settings, alias=alias)
 
 
 def class_breakdown(rs: ResultSet, settings: EntrapmentSettings | None = None) -> dict[str, Any]:

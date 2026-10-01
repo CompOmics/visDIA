@@ -26,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
+import duckdb
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -34,8 +35,16 @@ import pytest
 
 from mumdia_viewer.data import open_results
 from mumdia_viewer.data import tables as T
+from mumdia_viewer.data.counts import group_winners, unit_counts
 from mumdia_viewer.data.duck import DuckDB, sql_path
+from mumdia_viewer.data.entrapment import (
+    EntrapmentSettings,
+    count_classes,
+    entrapment_expr_positional,
+    spike_in_condition,
+)
 from mumdia_viewer.data.errors import ViewerError
+from mumdia_viewer.data.hashing import blake3_file
 from mumdia_viewer.data.quant import quant_gate, quant_state, quant_states
 from mumdia_viewer.data.tables import TableQuery, identification_table
 
@@ -882,12 +891,13 @@ def test_winner_rule_selects_the_engine_winners(open_fixture, name):
 
 
 def _entrapment_tie(config: dict) -> T.SqlFragment:
-    return T.entrapment_sql(
-        config["entrapment_marker"],
-        config["entrapment_exclude"],
-        config["entrapment_contaminant_markers"],
-        "w",
+    settings = EntrapmentSettings(
+        marker=config["entrapment_marker"],
+        exclude=config["entrapment_exclude"],
+        contaminants=tuple(config["entrapment_contaminant_markers"]),
     )
+    text, params = entrapment_expr_positional(settings, alias="w")
+    return T.SqlFragment(text, *params)
 
 
 def test_winner_rule_in_entrapment_mode(fixture_dir):
@@ -1084,6 +1094,221 @@ def test_entrapment_pages_on_every_path(tmp_path, fixture_dir, monkeypatch, path
         )
     kinds = {k[0] for k in T._cache(rs).entries}
     assert ("order" in kinds) == (path == "order")
+
+
+def _entrapment_quant_result(tmp_path: Path, fixture_dir, *, recorded: bool, change=None):
+    """The entrapment fixture with a manifest and a synthetic peptide_quant table.
+
+    ``recorded`` writes the rescore's configuration, with its marker strings. Without
+    it the run records no marker strings, and the spike-ins follow the viewer's default
+    rule (entrapment.settings_for). ``change`` edits psms_scored first. peptide_quant
+    holds the target rows with peptide_q_value <= 0.01 (a single run's PeptideQ gate).
+    """
+    src = fixture_dir("entrapment")
+    config = json.loads((src.parent / "config.entrap_mode.json").read_text())
+    report = json.loads((src / "psms_scored.parquet.report.json").read_text())
+    out = tmp_path / "entrap_quant"
+    out.mkdir()
+    scored_path = out / "psms_scored.parquet"
+    shutil.copy2(src / "psms_scored.parquet", scored_path)
+    shutil.copy2(src / "psms_scored.parquet.report.json", out)
+    if change is not None:
+        _rewrite(scored_path, change)
+    scored = pq.read_table(scored_path).to_pandas()
+    gated = scored[(scored["label"] == "target") & (scored["peptide_q_value"] <= 0.01)]
+    n = len(gated)
+    quant = pa.table(
+        {
+            "candidate_id": pa.array(gated["candidate_id"], pa.uint32()),
+            "base_peptide_id": pa.array(gated["base_peptide_id"], pa.uint32()),
+            "peptidoform": pa.array(gated["peptidoform"], pa.string()),
+            "charge": pa.array(gated["charge"], pa.int32()),
+            "protein_group": pa.array(gated["protein_group"], pa.string()),
+            "quantity": pa.array(np.ones(n), pa.float64()),
+            "quant_status": pa.array(["quantified"] * n, pa.string()),
+            "n_fragments_used": pa.array(np.full(n, 3), pa.int32()),
+            "integration_apex_rt": pa.array(gated["apex_rt"], pa.float64()),
+            "integration_lo_rt": pa.array(gated["elution_lo"], pa.float64()),
+            "integration_hi_rt": pa.array(gated["elution_hi"], pa.float64()),
+        }
+    )
+    pq.write_table(quant, out / "peptide_quant.parquet")
+    quant_report = {
+        "logical_name": "peptide_quant",
+        "schema_name": "peptide_quant",
+        "schema_version": 2,
+        "stage": "quant",
+        "rows": n,
+        "content_hash": blake3_file(out / "peptide_quant.parquet"),
+        "params": {"q_filter": "PeptideQ", "q_threshold": 0.01, "top_n_fragments": 3},
+        "stats": {},
+        "model_identity": None,
+        "elapsed_ms": 1,
+    }
+    (out / "peptide_quant.parquet.report.json").write_text(json.dumps(quant_report))
+    manifest = {
+        "mumdia_version": "0.5.0",
+        "cli_args": ["mumdia", "rescore", "--out-dir", "/recorded/entrap_quant"],
+        "config_json": json.dumps(config) if recorded else None,
+        "artifacts": {
+            "psms_scored": {
+                "path": "/recorded/entrap_quant/psms_scored.parquet",
+                "schema_name": "psms_scored",
+                "schema_version": 4,
+                "rows": report["rows"],
+                "content_hash": blake3_file(scored_path),
+                "producing_stage": "rescore",
+            },
+            "peptide_quant": {
+                "path": "/recorded/entrap_quant/peptide_quant.parquet",
+                "schema_name": "peptide_quant",
+                "schema_version": 2,
+                "rows": n,
+                "content_hash": quant_report["content_hash"],
+                "producing_stage": "quant",
+            },
+        },
+    }
+    (out / "manifest.json").write_text(json.dumps(manifest))
+    return open_results(out)
+
+
+def _all_pages(rs, query: TableQuery) -> pd.DataFrame:
+    page = identification_table(rs, replace(query, limit=T.MAX_LIMIT, offset=0))
+    rows = [page.rows]
+    while sum(len(r) for r in rows) < page.total:
+        offset = sum(len(r) for r in rows)
+        rows.append(identification_table(rs, replace(page.query, offset=offset)).rows)
+    return pd.concat(rows, ignore_index=True)
+
+
+@pytest.mark.parametrize("recorded", [True, False])
+def test_tables_counts_and_quant_flag_the_same_spike_ins(tmp_path, fixture_dir, recorded):
+    """Review consistency #5: tables, counts and quant use one spike-in test.
+
+    The test is entrapment.count_classes (the settings of settings_for). Without
+    recorded marker strings the tables used to flag nothing, while the counts used the
+    viewer's default rule. A tie makes the rule visible in every module: a real target
+    R and a later spike-in E share a base peptide and a score, a decoy D of the group
+    scores higher, and every row of the group holds peptide_q_value 1.0. In entrapment
+    mode D does not compete and E wins the tie.
+    """
+    src = pq.read_table(fixture_dir("entrapment") / "psms_scored.parquet").to_pandas()
+    src["frn"] = np.arange(len(src))
+    protein = src["protein"]
+    target = src["label"] == "target"
+    spike = (
+        target
+        & protein.str.contains("ENTRAP_", regex=False)
+        & ~protein.str.contains("REAL_", regex=False)
+    )
+    for token in ("KRT", "K1C", "K2C", "ALBU", "TRYP"):
+        spike &= ~protein.str.contains(token, regex=False)
+    real = target & ~protein.str.contains("ENTRAP_", regex=False) & (src["peptide_q_value"] < 1)
+    r = src[real].iloc[0]
+    later = spike & (src["frn"] > r["frn"]) & (src["base_peptide_id"] != r["base_peptide_id"])
+    e = src[later].iloc[0]
+    d = src[(src["label"] == "decoy") & (src["frn"] > e["frn"])].iloc[0]
+    group = int(r["base_peptide_id"])
+
+    def change(frame: pd.DataFrame) -> pd.DataFrame:
+        cid = frame["candidate_id"]
+        frame.loc[cid == e["candidate_id"], ["base_peptide_id", "score"]] = [group, r["score"]]
+        frame.loc[cid == d["candidate_id"], ["base_peptide_id", "score"]] = [group, r["score"] + 10]
+        frame.loc[frame["base_peptide_id"] == group, "peptide_q_value"] = 1.0
+        return frame
+
+    rs = _entrapment_quant_result(tmp_path, fixture_dir, recorded=recorded, change=change)
+    cls = count_classes(rs)
+    assert cls.mode == "entrapment" and cls.spike_present
+    assert cls.markers_recorded == recorded
+    path = sql_path(rs.scored.path)
+    # counts: the rows of count_classes(rs).spike.
+    sql = f"SELECT source, candidate_id FROM read_parquet($path) WHERE {cls.spike}"
+    params = {k: v for k, v in cls.params.items() if f"${k}" in sql}
+    counted = {(int(a), int(b)) for a, b in rs.duck.rows(sql, {**params, "path": path})}
+    # quant: the predicate of the quant states' winner rule.
+    text, values = spike_in_condition(rs, "p")
+    quant_sql = f"SELECT p.source, p.candidate_id FROM read_parquet(?) p WHERE {text}"
+    in_quant = {(int(a), int(b)) for a, b in rs.duck.rows(quant_sql, [path, *values])}
+    # tables: is_entrapment of every precursor row.
+    rows = _all_pages(rs, TableQuery(threshold=None, include_decoys=True, sort_by="candidate_id"))
+    assert len(rows) == len(src)
+    flagged = rows[rows["is_entrapment"].astype(bool)]
+    pairs = zip(flagged["source"], flagged["candidate_id"], strict=True)
+    in_table = {(int(a), int(b)) for a, b in pairs}
+    assert counted == in_quant == in_table
+    assert len(counted) == (17_590 if recorded else 17_594)
+    # The peptide table states the spike-ins and the real targets; the real targets are
+    # the identification count.
+    counts = {c.unit: c for c in unit_counts(rs, 0.01)}
+    page = identification_table(rs, TableQuery(unit="peptide", limit=0))
+    n_real = counts["peptide"].n_target
+    assert f"is_entrapment flags them ({counts['peptide'].n_spike_in:,} of the" in page.description
+    assert f"the other {n_real:,} rows are real targets" in page.description
+    assert page.total == n_real + counts["peptide"].n_spike_in
+    # The tie: counts, tables and quant all name E as the winner of R's base peptide.
+    winner = group_winners(rs, "peptide", keys=[group])
+    assert list(winner["candidate_id"]) == [int(e["candidate_id"])]
+    peptides = _all_pages(rs, TableQuery(unit="peptide", threshold=None, sort_by="base_peptide_id"))
+    row = peptides[peptides["base_peptide_id"] == group].iloc[0]
+    assert int(row["candidate_id"]) == int(e["candidate_id"])
+    assert row["is_winner"] and row["is_entrapment"]
+    reason = quant_state(rs, None, int(r["candidate_id"])).reason
+    assert f"the winning row of this base peptide is candidate {int(e['candidate_id'])}" in reason
+
+
+def test_base_peptide_competition_is_named_in_the_tables(open_fixture):
+    """Review semantics #6: under compete.group_by = BasePeptide, precursor_q counts are a
+    base-peptide unit, as the overview's count says (counts.unit_counts)."""
+    rs = open_fixture("ovl_bp")
+    caveat = "compete.group_by = BasePeptide kept about one form per base peptide"
+    count = {c.unit: c for c in unit_counts(rs, 0.01)}["precursor"]
+    assert caveat in count.label and "approximates a base-peptide count" in count.label
+    page = identification_table(rs, TableQuery(limit=0))
+    assert page.total == count.n_target
+    assert caveat in page.description
+    assert "a count on precursor_q approximates a base-peptide count" in page.description
+    assert caveat in page.column_labels["precursor_q"]
+    # Another q column, or no q filter: the rows themselves approximate base peptides.
+    for query in (TableQuery(q_column="q_value", limit=0), TableQuery(threshold=None, limit=0)):
+        other = identification_table(rs, query)
+        assert "these rows approximate base peptides, not every precursor" in other.description
+        assert caveat in other.column_labels["precursor_q"]
+    peptide = identification_table(rs, TableQuery(unit="peptide", limit=0))
+    assert caveat in peptide.column_labels["precursor_q"]
+    single = identification_table(open_fixture("single"), TableQuery(limit=0))
+    assert "compete.group_by" not in single.description
+    assert "base-peptide count" not in single.column_labels["precursor_q"]
+
+
+@pytest.mark.parametrize("large", [False, True])
+def test_duckdb_failure_is_a_viewer_error(fixture_dir, monkeypatch, large):
+    """Review scale #5: a DuckDB error (here a simulated out-of-memory) names the result."""
+    if large:
+        monkeypatch.setattr(T, "MATERIALISE_MIN_ROWS", 0)
+    rs = open_results(fixture_dir("single"))
+    real_execute = rs.duck.execute
+
+    def execute(sql, params=None):
+        if sql.startswith("CREATE TABLE"):
+            raise duckdb.OutOfMemoryException("Out of Memory Error: failed to allocate")
+        return real_execute(sql, params)
+
+    def df(sql, params=None):
+        raise duckdb.OutOfMemoryException("Out of Memory Error: failed to allocate")
+
+    monkeypatch.setattr(rs.duck, "execute", execute)
+    monkeypatch.setattr(rs.duck, "df", df)
+    rows = pq.read_metadata(rs.scored.path).num_rows
+    query = TableQuery(threshold=None, include_decoys=True, offset=100)
+    with pytest.raises(ViewerError) as err:
+        identification_table(rs, query)
+    text = str(err.value)
+    assert text.startswith("The precursor table query failed on a result of ")
+    assert f"a result of {rows:,} rows, from a scored table of {rows:,} rows" in text
+    assert "OutOfMemoryException" in text
+    assert f"Query: {query!r}." in text
 
 
 def test_topk_selected_peaks(open_fixture):

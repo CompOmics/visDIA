@@ -6,9 +6,11 @@ pyarrow.compute (no DuckDB).
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import time
+from pathlib import Path
 
 import numpy as np
 import pyarrow as pa
@@ -29,6 +31,7 @@ from mumdia_viewer.data.counts import (
     score_histogram,
     unit_counts,
 )
+from mumdia_viewer.data.hashing import blake3_file
 from mumdia_viewer.data.units import (
     COUNT_UNITS,
     UNITS,
@@ -72,6 +75,17 @@ COLUMNS = [
 
 # --------------------------------------------------------------------------- reference
 
+# The units, written out here and not read from mumdia_viewer.data.units, so that the
+# reference shares no definition with the code under test: (q column, counted key
+# columns; no key column means rows). A protein group is a non-empty protein_group.
+REFERENCE_UNITS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "psm": ("q_value", ()),
+    "precursor": ("precursor_q", ("peptidoform", "charge")),
+    "peptide": ("peptide_q_value", ("base_peptide_id",)),
+    "protein_group": ("pg_q_value", ("protein_group",)),
+}
+REFERENCE_THRESHOLDS = [0.01, 0.05, 0.1, 0.5]
+
 
 def _table(rs) -> pa.Table:
     return pq.read_table(rs.scored.path, columns=COLUMNS)
@@ -79,20 +93,22 @@ def _table(rs) -> pa.Table:
 
 def _n_keys(table: pa.Table, unit: str) -> int:
     """Rows or distinct keys of an already filtered table (pyarrow only)."""
-    u = UNITS[unit]
-    if not u.distinct:
+    _, keys = REFERENCE_UNITS[unit]
+    if unit == "protein_group":
+        table = table.filter(pc.not_equal(table["protein_group"], ""))
+    if not keys:
         return table.num_rows
-    if len(u.distinct) == 1:
-        return int(pc.count_distinct(table[u.distinct[0]]).as_py())
-    return table.group_by(list(u.distinct)).aggregate([]).num_rows
+    return table.group_by(list(keys)).aggregate([]).num_rows
+
+
+def _reference_mask(table: pa.Table, unit: str, rows, t: float) -> int:
+    """Keys of ``unit`` among the rows of a boolean mask that pass its q column at ``t``."""
+    q_column, _ = REFERENCE_UNITS[unit]
+    return _n_keys(table.filter(pc.and_(rows, pc.less_equal(table[q_column], t))), unit)
 
 
 def _reference(table: pa.Table, unit: str, label: str, t: float) -> int:
-    u = UNITS[unit]
-    mask = pc.and_(pc.equal(table["label"], label), pc.less_equal(table[u.q_column], t))
-    for column in u.exclude_empty:
-        mask = pc.and_(mask, pc.not_equal(table[column], ""))
-    return _n_keys(table.filter(mask), unit)
+    return _reference_mask(table, unit, pc.equal(table["label"], label), t)
 
 
 # --------------------------------------------------------------------------- units
@@ -148,8 +164,13 @@ def test_bind_params_keeps_only_used_names():
 
 
 @pytest.mark.parametrize("name", COUNT_FIXTURES)
-@pytest.mark.parametrize("t", [0.01, 0.05])
+@pytest.mark.parametrize("t", REFERENCE_THRESHOLDS)
 def test_counts_equal_an_independent_pyarrow_count(open_fixture, name, t):
+    """The SPEC acceptance test: each unit's count equals a pyarrow count.
+
+    The smallest target pg_q_value of these fixtures is 1/16, so protein groups pass only
+    from t = 0.1 on; 0.1 and 0.5 make the protein-group comparison non-trivial.
+    """
     rs = open_fixture(name)
     table = _table(rs)
     counts = {c.unit: c for c in unit_counts(rs, t)}
@@ -159,9 +180,103 @@ def test_counts_equal_an_independent_pyarrow_count(open_fixture, name, t):
         assert c.n_target == _reference(table, unit, "target", t), (name, unit)
         assert c.n_decoy == _reference(table, unit, "decoy", t), (name, unit)
         assert c.label.startswith(UNITS[unit].label(c.n_target, t)), c.label
-        assert c.q_column == UNITS[unit].q_column and c.q_column in c.sql
+        assert c.q_column == REFERENCE_UNITS[unit][0] and c.q_column in c.sql
         assert not c.derived
         assert c.n_spike_in is None  # no entrapment markers in these fixtures
+    if t >= 0.1:
+        assert counts["protein_group"].n_target > 0, name
+
+
+ENTRAPMENT_TOOLS = Path(__file__).parent / "fixtures" / "tools" / "entrapment"
+
+
+@pytest.fixture(scope="module")
+def entrapment_rs(fixture_dir, tmp_path_factory):
+    """The entrapment fixture (no manifest) with a minimal manifest and its configuration."""
+    src = fixture_dir("entrapment")
+    dst = tmp_path_factory.mktemp("counts_entrapment") / "run"
+    dst.mkdir()
+    for name in ("psms_scored.parquet", "psms_scored.parquet.report.json"):
+        shutil.copy2(src / name, dst / name)
+    report = json.loads((dst / "psms_scored.parquet.report.json").read_text(encoding="utf-8"))
+    config = (ENTRAPMENT_TOOLS / "config.entrap_mode.json").read_text(encoding="utf-8")
+    manifest = {
+        "mumdia_version": "0.5.0",
+        "cli_args": ["mumdia", "rescore", "--out-dir", str(dst)],
+        "config_json": json.dumps(json.loads(config)),
+        "artifacts": {
+            "psms_scored": {
+                "path": str(dst / "psms_scored.parquet"),
+                "schema_name": "psms_scored",
+                "schema_version": 4,
+                "rows": report["rows"],
+                "content_hash": report["content_hash"],
+                "producing_stage": "rescore",
+            }
+        },
+    }
+    (dst / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return open_results(dst)
+
+
+@pytest.mark.parametrize("t", REFERENCE_THRESHOLDS)
+def test_entrapment_counts_equal_an_independent_pyarrow_count(entrapment_rs, t):
+    """Entrapment mode: real targets, decoys and spike-ins per unit against pyarrow.
+
+    The spike-in rule of the run's configuration is written out here: a target whose
+    protein contains ENTRAP_, not REAL_, and none of the contaminant tokens.
+    """
+    rs = entrapment_rs
+    table = pq.read_table(rs.scored.path, columns=[*COLUMNS, "protein"])
+    target = pc.equal(table["label"], "target")
+    spike = pc.and_(target, pc.match_substring(table["protein"], "ENTRAP_"))
+    for token in ("REAL_", "KRT", "K1C", "K2C", "ALBU", "TRYP"):
+        spike = pc.and_(spike, pc.invert(pc.match_substring(table["protein"], token)))
+    real = pc.and_(target, pc.invert(spike))
+    decoy = pc.equal(table["label"], "decoy")
+    counts = {c.unit: c for c in unit_counts(rs, t)}
+    for unit in COUNT_UNITS:
+        c = counts[unit]
+        assert c.n_target == _reference_mask(table, unit, real, t), (unit, t)
+        assert c.n_decoy == _reference_mask(table, unit, decoy, t), (unit, t)
+        assert c.n_spike_in == _reference_mask(table, unit, spike, t), (unit, t)
+    assert counts["protein_group"].n_target > 0 and counts["protein_group"].n_spike_in > 0
+
+
+def test_an_empty_protein_group_is_not_counted(fixture_dir, tmp_path):
+    """A winning row with protein_group '' is not a protein group (no fixture has one)."""
+    root = tmp_path / "out"
+    shutil.copytree(fixture_dir("single"), root)
+    path = root / "psms_scored.parquet"
+    table = pq.read_table(path)
+    winners = pc.and_(pc.equal(table["label"], "target"), pc.less(table["pg_q_value"], 1.0))
+    i = int(pc.indices_nonzero(winners)[0].as_py())
+    groups = table["protein_group"].to_pylist()
+    groups[i] = ""
+    index = table.schema.get_field_index("protein_group")
+    table = table.set_column(index, table.schema.field(index), pa.array(groups, pa.string()))
+    pq.write_table(table, path)
+    digest = blake3_file(path)
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest["artifacts"]["psms_scored"]["content_hash"] = digest
+    (root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    rs = open_results(root)
+    counts = {c.unit: c for c in unit_counts(rs, 0.1)}
+    # 16 protein groups pass 0.1 in the fixture; the one whose winner lost its string is
+    # not counted, and '' is not a group.
+    reference = _table(rs)
+    assert counts["protein_group"].n_target == _reference(reference, "protein_group", "target", 0.1)
+    assert counts["protein_group"].n_target == 15
+    # The per-run count leaves the empty string out as well.
+    target = pc.equal(reference["label"], "target")
+    accepted = reference.filter(pc.and_(target, pc.less_equal(reference["run_psm_q"], 0.5)))
+    assert "" in accepted["protein_group"].to_pylist()
+    per_run = int(per_run_counts(rs, 0.5)["protein_groups"].iloc[0])
+    assert (
+        per_run
+        == _n_keys(accepted, "protein_group")
+        == len(set(accepted["protein_group"].to_pylist()) - {""})
+    )
 
 
 @pytest.mark.parametrize("name", REPORT_FIXTURES)
@@ -257,6 +372,7 @@ def test_experiment_per_run_counts_use_run_psm_q(open_fixture):
         assert row["target_psms"] == accepted.num_rows
         assert row["precursors"] == _n_keys(accepted, "precursor")
         assert row["peptides"] == _n_keys(accepted, "peptide")
+        assert row["protein_groups"] == _n_keys(accepted, "protein_group") > 0
         decoys = part.filter(
             pc.and_(pc.equal(part["label"], "decoy"), pc.less_equal(part["run_psm_q"], 0.01))
         )

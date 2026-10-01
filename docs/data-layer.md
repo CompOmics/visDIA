@@ -78,9 +78,13 @@ reported as "deleted after pooling", not as errors.
 ## Schema versions
 
 A parquet footer carries no schema name or version. The version of an artifact is read
-from its manifest record, then from its report. The few files the engine writes with
-neither (the per-run LFQ siblings, the multi-head library table, the MBR transfer table)
-get a version inferred from their columns, labelled as inferred.
+from its manifest record, then from its report. When the two disagree, the report wins,
+because it is written together with the file (a single-stage re-run rewrites the table and
+its report but not the manifest); the disagreement is reported, and the file is refused
+when either version is unsupported. The few files the engine writes with neither record
+(the per-run LFQ siblings, the multi-head library table, the MBR transfer table) get a
+version inferred from their columns, labelled as inferred; an ion-mobility column in a
+schema whose released versions have none infers the unreleased ion-mobility version.
 
 | schema | versions read | notes |
 |---|---|---|
@@ -102,8 +106,31 @@ by a fingerprint of its size, modification time and footer. The cache refuses to
 inside an opened run directory. The engine's own cache (`MUMDIA_CACHE_DIR`,
 `%LOCALAPPDATA%\mumdia\cache`) is a different directory.
 
+Nothing is created on disk before the first write, and a cache root inside an opened
+directory is refused before it could create anything there.
+
 Opening a directory never hashes a file. `hashing.verify` compares a file with its
 recorded hash on request and caches the verdict by (path, size, modification time).
+
+## DuckDB
+
+Every result set has its own in-memory DuckDB database (8 threads, 512 MB) with a private
+spill directory, removed when the database closes: spill files are not safe to share
+between instances. When no private directory can be made, spilling is disabled rather
+than left at DuckDB's default, `.tmp` in the working directory. Every thread (a Dash
+callback) uses its own cursor. After each query the cursor runs a trivial statement, which
+ends the previous scan: DuckDB otherwise keeps a parquet file open, which on Windows
+blocks the engine from replacing it. Paths given to `read_parquet(?)` have their glob
+characters escaped, because DuckDB reads the parameter as a glob: a directory named
+`run[1]` would otherwise match `run1` and read another run's table.
+
+## Memory
+
+The fixed caches are the row-group cache (256 MB), the spectrum cache (96 MB) and
+DuckDB's limit (512 MB). `runtime.configure_environment()`, which the command-line entry
+point calls before numpy and pyarrow are imported, sets one OpenBLAS thread and Arrow's
+system allocator: on the Astral single run the system allocator halved the private memory
+after 21 precursor details (to 0.64 to 0.72 GB) for about 17% slower warm details.
 
 ## Per-candidate reads
 
@@ -146,4 +173,17 @@ every fixture and on the Astral run.
 
 The engine's `peptides.tsv` lists one precursor (the winner) per accepted base peptide, so
 its row count, recorded as `n_precursors` in the experiment manifest, equals the peptide
-count and not the precursor count. The viewer labels it that way.
+count and not the precursor count. `overview.engine_report_numbers` returns it with that
+label.
+
+## The precursor detail
+
+`detail.precursor_detail` assembles one identification. Only the scored row is required;
+every other part is None (or empty) when its artifact is missing or refused, and the
+detail's notes say why. After match-between-runs a run's `scored.parquet` holds q values
+lowered to min(native q, transfer_q) on transferred rows; the detail shows the rescorer's
+native values from `scored_combined.parquet` and lists the lowered values separately, as
+the values quant and the report used. The exact decoy partner is looked up per candidate
+(one query for the rows of the candidate's library `peptidoform_id`), and only when the
+library row carries the scored row's peptidoform and charge, which rejects a library that
+is not the one the run searched.

@@ -395,3 +395,14 @@ def test_real_single_overview(real_single):
     artifacts = artifact_table(rs)
     assert not artifacts["key"].duplicated().any()
     print("\n" + table.reset_index()[["directory", "stage", "elapsed_s"]].to_string())
+
+
+def test_engine_report_numbers_name_their_real_unit(open_fixture):
+    from mumdia_viewer.data.overview import engine_report_numbers
+
+    numbers = {n.key: n for n in engine_report_numbers(open_fixture("experiment"))}
+    assert numbers["n_precursors"].value == 150
+    assert "a peptide count, not a precursor_q count" in numbers["n_precursors"].label
+    mbr = {n.key: n for n in engine_report_numbers(open_fixture("mbr"))}
+    assert "match-between-runs" in mbr["n_protein_groups"].label
+    assert engine_report_numbers(open_fixture("single")) == []

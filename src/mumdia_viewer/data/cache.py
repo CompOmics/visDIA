@@ -21,7 +21,9 @@ import json
 import os
 import re
 import sys
+import tempfile
 import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +61,8 @@ def _is_within(path: Path, root: Path) -> bool:
 class Cache:
     """Keyed storage for derived data. It refuses to write inside a run directory.
 
+    Nothing is created on disk until the first write, so a cache whose root lies inside
+    a run directory is refused (:meth:`forbid`) before it could create anything there.
     When the cache directory cannot be created, the cache degrades to memory only and
     ``writable`` is False.
     """
@@ -68,17 +72,31 @@ class Cache:
         self._forbidden: list[Path] = []
         self._memory: dict[tuple[str, str], Any] = {}
         self._lock = threading.Lock()
-        try:
-            (self.root / f"v{FORMAT_VERSION}").mkdir(parents=True, exist_ok=True)
-            self.writable = True
-        except OSError:
-            self.writable = False
+        self._writable: bool | None = None  # decided on first use
+
+    @property
+    def writable(self) -> bool:
+        """True when entries go to disk. Creates the root on first use, never inside a
+        forbidden directory."""
+        if self._writable is None:
+            if any(_is_within(self.root, d) for d in self._forbidden):
+                self._writable = False
+            else:
+                try:
+                    (self.root / f"v{FORMAT_VERSION}").mkdir(parents=True, exist_ok=True)
+                    self._writable = True
+                except OSError:
+                    self._writable = False
+        return self._writable
 
     def forbid(self, directory: Path) -> None:
         """Never write inside ``directory`` (a run or experiment directory)."""
         self._forbidden.append(Path(directory))
-        if any(_is_within(self.root, d) for d in self._forbidden):
-            self.writable = False
+        if _is_within(self.root, Path(directory)):
+            self._writable = False
+
+    def is_forbidden(self, path: Path) -> bool:
+        return any(_is_within(path, d) for d in self._forbidden)
 
     def entry_dir(self, identity: str) -> Path:
         """``<root>/v1/<identity[:2]>/<identity>/`` for a sanitised identity."""
@@ -87,11 +105,27 @@ class Cache:
         key = digest or kind
         return self.root / f"v{FORMAT_VERSION}" / kind / key[:2] / key
 
-    def temp_dir(self) -> Path:
-        path = self.root / "tmp"
+    def temp_dir(self) -> Path | None:
+        """A new spill directory for one DuckDB instance, or None when none can be made.
+
+        DuckDB spill files are not safe to share between instances, so every call returns
+        a directory of its own: under the cache root when it is writable, else a private
+        directory in the system's temporary directory. Never inside a forbidden directory.
+        """
+        name = f"{os.getpid()}-{uuid.uuid4().hex}"
+        candidates = []
         if self.writable:
-            path.mkdir(parents=True, exist_ok=True)
-        return path
+            candidates.append(self.root / "tmp" / name)
+        candidates.append(Path(tempfile.gettempdir()) / "mumdia-viewer" / name)
+        for path in candidates:
+            if self.is_forbidden(path):
+                continue
+            try:
+                path.mkdir(parents=True, exist_ok=False)
+            except OSError:
+                continue
+            return path
+        return None
 
     def _target(self, identity: str, name: str) -> Path:
         path = self.entry_dir(identity) / name

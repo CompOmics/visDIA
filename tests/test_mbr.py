@@ -13,6 +13,7 @@ import shutil
 import time
 from pathlib import Path
 
+import duckdb
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -20,12 +21,16 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import pytest
 
+from mumdia_viewer.data import mbr as mbr_module
 from mumdia_viewer.data import open_results
-from mumdia_viewer.data.counts import per_run_counts, unit_counts
+from mumdia_viewer.data.counts import MAX_WINNER_KEYS, per_run_counts, unit_counts
+from mumdia_viewer.data.errors import ViewerError
 from mumdia_viewer.data.mbr import (
+    MAX_N_RUNS_KEYS,
     mbr_info,
     mbr_ran,
     n_runs_decomposition,
+    n_runs_distribution,
     transfer_counts,
     transfer_of,
     transfers_for_run,
@@ -51,6 +56,42 @@ def _per_source(table: pa.Table, mask) -> dict[int, int]:
     part = table.filter(mask)
     counts = pc.value_counts(part["source"]).to_pylist()
     return {int(d["values"]): int(d["counts"]) for d in counts}
+
+
+def _target_keys(rs) -> list[tuple[str, int]]:
+    """Every (peptidoform, charge) with a target row in the pooled table (pyarrow)."""
+    combined = pq.read_table(rs.scored.path, columns=["peptidoform", "charge", "label"])
+    targets = combined.filter(pc.equal(combined["label"], "target"))
+    keys = targets.group_by(["peptidoform", "charge"]).aggregate([])
+    return list(zip(keys["peptidoform"].to_pylist(), keys["charge"].to_pylist(), strict=True))
+
+
+def _n_runs_oracle(rs, t: float) -> pd.DataFrame:
+    """n_runs per target (peptidoform, charge), native and engine, with pyarrow and pandas.
+
+    Native: runs with a target row at run_psm_q <= t in scored_combined. Engine: runs
+    with such a row or a transfer (the TSV rule, facts G3 R6).
+    """
+    combined = pq.read_table(
+        rs.scored.path,
+        columns=["source", "candidate_id", "peptidoform", "charge", "label", "run_psm_q"],
+    ).to_pandas()
+    rows = combined[combined["label"] == "target"].copy()
+    moved = set()
+    art = rs.artifact("mbr_transferred")
+    if mbr_ran(rs) and art is not None:
+        tr = pq.read_table(art.path, columns=["source", "candidate_id"]).to_pandas()
+        moved = set(zip(tr["source"].astype(int), tr["candidate_id"].astype(int), strict=True))
+    rows["native"] = rows["run_psm_q"] <= t
+    rows["tr"] = [
+        (int(s), int(c)) in moved for s, c in zip(rows["source"], rows["candidate_id"], strict=True)
+    ]
+    rows["accepted"] = rows["native"] | rows["tr"]
+    keys = ["peptidoform", "charge"]
+    native = rows[rows["native"]].groupby(keys)["source"].nunique().rename("n_runs_native")
+    engine = rows[rows["accepted"]].groupby(keys)["source"].nunique().rename("n_runs_engine")
+    out = pd.concat([native, engine], axis=1).fillna(0).astype("int64").reset_index()
+    return out
 
 
 # --------------------------------------------------------------------------- detection
@@ -240,7 +281,9 @@ def test_empty_transfer_table_with_null_typed_strings(fixture_dir, tmp_path):
     assert any("48 rows" in n for n in info.notes)
     assert list(transfer_counts(rs, 0.004)["transfers"]) == [0, 0]
     assert transfers_for_run(rs, "a").empty
-    assert int(n_runs_decomposition(rs)["n_runs_transfer_only"].sum()) == 0
+    assert int(n_runs_decomposition(rs, all_keys=True)["n_runs_transfer_only"].sum()) == 0
+    dist = n_runs_distribution(rs)
+    assert int(dist.loc[dist["n_runs"] > 0, "transfer_only"].sum()) == 0
 
 
 # --------------------------------------------------------------------------- n_runs
@@ -248,9 +291,10 @@ def test_empty_transfer_table_with_null_typed_strings(fixture_dir, tmp_path):
 
 def test_n_runs_decomposition_reproduces_the_tsv(open_fixture, fixture_dir):
     rs = open_fixture("mbr")
-    dec = n_runs_decomposition(rs)
-    assert dec.attrs["threshold"] == 0.004  # experiment.report.q_threshold
     peptides = _tsv(fixture_dir("mbr") / "peptides.tsv")
+    keys = list(zip(peptides["precursor"], peptides["charge"], strict=True))
+    dec = n_runs_decomposition(rs, keys=keys)
+    assert dec.attrs["threshold"] == 0.004  # experiment.report.q_threshold
     merged = peptides.merge(
         dec, left_on=["precursor", "charge"], right_on=["peptidoform", "charge"], how="left"
     )
@@ -259,35 +303,47 @@ def test_n_runs_decomposition_reproduces_the_tsv(open_fixture, fixture_dir):
     # 16 precursors were transferred into run a, where nothing passes 0.004 natively.
     assert int(merged["n_runs_transfer_only"].sum()) == 16
     assert (dec["n_runs_engine"] == dec["n_runs_native"] + dec["n_runs_transfer_only"]).all()
+    # The explicit whole-table form gives the same rows for these keys.
+    whole = n_runs_decomposition(rs, all_keys=True)
+    picked = whole.merge(
+        peptides[["precursor", "charge"]],
+        left_on=["peptidoform", "charge"],
+        right_on=["precursor", "charge"],
+    ).drop(columns="precursor")
+    pd.testing.assert_frame_equal(
+        picked.sort_values(["peptidoform", "charge"]).reset_index(drop=True),
+        dec.sort_values(["peptidoform", "charge"]).reset_index(drop=True),
+    )
     proteins = _tsv(fixture_dir("mbr") / "proteins.tsv")
-    groups = n_runs_decomposition(rs, level="protein_group")
+    groups = n_runs_decomposition(rs, level="protein_group", keys=list(proteins["protein_group"]))
     merged = proteins.merge(groups, on="protein_group", how="left")
     assert len(merged) == 13 and (merged["n_runs"] == merged["n_runs_engine"]).all()
     with pytest.raises(ValueError, match="level"):
-        n_runs_decomposition(rs, level="peptide")
+        n_runs_decomposition(rs, level="peptide", all_keys=True)
 
 
 def test_n_runs_without_mbr_is_native(open_fixture, fixture_dir):
     rs = open_fixture("experiment")
-    dec = n_runs_decomposition(rs, 0.01)
+    dec = n_runs_decomposition(rs, 0.01, all_keys=True)
     assert (dec["n_runs_transfer_only"] == 0).all()
     peptides = _tsv(fixture_dir("experiment") / "peptides.tsv")
     merged = peptides.merge(
         dec, left_on=["precursor", "charge"], right_on=["peptidoform", "charge"], how="left"
     )
     assert (merged["n_runs"] == merged["n_runs_native"]).all()
-    everything = n_runs_decomposition(rs, 0.01, include_zero=True)
-    assert len(everything) >= len(dec) and (everything["n_runs_engine"] >= 0).all()
+    keys = _target_keys(rs)
+    everything = n_runs_decomposition(rs, 0.01, keys=keys, include_zero=True)
+    assert len(everything) == len(keys) >= len(dec) and (everything["n_runs_engine"] >= 0).all()
 
 
 def test_n_runs_label_names_the_report_threshold(open_fixture, fixture_dir):
     rs = open_fixture("mbr")
-    at_report = n_runs_decomposition(rs)
+    at_report = n_runs_decomposition(rs, all_keys=True)
     label = at_report.attrs["labels"]["n_runs_engine"]
     assert "(the TSV's n_runs rule)" in label
     assert "0.004 is the report threshold (experiment.report.q_threshold)" in label
     assert at_report.attrs["report_threshold"] == 0.004
-    other = n_runs_decomposition(rs, 0.05)
+    other = n_runs_decomposition(rs, 0.05, all_keys=True)
     label = other.attrs["labels"]["n_runs_engine"]
     assert "the n_runs of the TSV report" not in label
     assert (
@@ -300,8 +356,105 @@ def test_n_runs_label_names_the_report_threshold(open_fixture, fixture_dir):
         other, left_on=["precursor", "charge"], right_on=["peptidoform", "charge"], how="left"
     )
     assert int((merged["n_runs"] != merged["n_runs_engine"]).sum()) == 32
-    groups = n_runs_decomposition(rs, 0.05, level="protein_group")
+    groups = n_runs_decomposition(rs, 0.05, level="protein_group", all_keys=True)
     assert "equals proteins.tsv n_runs only" in groups.attrs["labels"]["n_runs_engine"]
+
+
+@pytest.mark.parametrize("name", ["mbr", "experiment"])
+def test_n_runs_for_selected_keys_and_the_whole_table(open_fixture, name):
+    """keys and all_keys=True give the oracle's rows; the result is bounded (scale #6)."""
+    rs = open_fixture(name)
+    t = 0.004 if name == "mbr" else 0.01
+    oracle = _n_runs_oracle(rs, t).sort_values(["peptidoform", "charge"]).reset_index(drop=True)
+    whole = n_runs_decomposition(rs, t, all_keys=True)
+    assert len(whole) == len(oracle) > 0
+    got = whole[["peptidoform", "charge", "n_runs_native", "n_runs_engine"]]
+    pd.testing.assert_frame_equal(
+        got.reset_index(drop=True), oracle[list(got.columns)], check_dtype=False
+    )
+    some = list(zip(oracle["peptidoform"][:7], oracle["charge"][:7], strict=True))
+    picked = n_runs_decomposition(rs, t, keys=[*some, ("NOT_A_PEPTIDE", 2)])
+    assert list(zip(picked["peptidoform"], picked["charge"], strict=True)) == some
+    # With include_zero every key with a target row is returned, also without a run.
+    every = _target_keys(rs)
+    zero = n_runs_decomposition(rs, t, keys=every, include_zero=True)
+    assert len(zero) == len(every)
+    assert int((zero["n_runs_engine"] == 0).sum()) == len(every) - len(oracle)
+    # The presence is counted on a de-duplicated (key, source) relation with count(*).
+    assert "count(DISTINCT" not in whole.attrs["sql"]
+    assert "GROUP BY peptidoform, charge, source" in whole.attrs["sql"]
+
+
+def test_n_runs_distribution_is_the_histogram_of_the_keys(open_fixture):
+    """The distribution mode returns only counts per n_runs, equal to the per-key rows."""
+    for name, t in (("mbr", 0.004), ("mbr", 0.05), ("experiment", 0.01)):
+        rs = open_fixture(name)
+        dist = n_runs_distribution(rs, t)
+        assert list(dist.columns) == ["n_runs", "native", "transfer_only", "engine"]
+        assert list(dist["n_runs"]) == list(range(len(rs.runs) + 1))
+        whole = n_runs_decomposition(rs, t, all_keys=True)
+        for column, source in (
+            ("native", "n_runs_native"),
+            ("transfer_only", "n_runs_transfer_only"),
+            ("engine", "n_runs_engine"),
+        ):
+            counts = whole[source].value_counts()
+            expected = [int(counts.get(v, 0)) for v in dist["n_runs"]]
+            assert list(dist[column]) == expected, (name, t, column)
+        assert int(dist.loc[0, "engine"]) == 0
+        assert "precursors (unique (peptidoform, charge)" in dist.attrs["labels"]["engine"]
+        # include_zero adds the target keys without an accepted run to n_runs = 0.
+        with_zero = n_runs_distribution(rs, t, include_zero=True)
+        extra = len(_target_keys(rs)) - len(whole)
+        assert int(with_zero.loc[0, "engine"]) == extra
+        assert list(with_zero["engine"][1:]) == list(dist["engine"][1:])
+    rs = open_fixture("mbr")
+    # 16 precursors reach run a only through a transfer at 0.004 (facts G3 F9.4).
+    dist = n_runs_distribution(rs)
+    assert int(dist.loc[1, "transfer_only"]) == 16
+    groups = n_runs_distribution(rs, level="protein_group")
+    assert "protein groups" in groups.attrs["unit"]
+
+
+def test_n_runs_arguments_are_bounded(open_fixture):
+    rs = open_fixture("mbr")
+    assert MAX_N_RUNS_KEYS == MAX_WINNER_KEYS
+    with pytest.raises(ValueError, match="all_keys=True"):
+        n_runs_decomposition(rs)
+    with pytest.raises(ValueError, match="not both"):
+        n_runs_decomposition(rs, keys=[("A", 2)], all_keys=True)
+    with pytest.raises(ValueError, match=f"at most {MAX_N_RUNS_KEYS:,} keys"):
+        n_runs_decomposition(rs, keys=[("A", 2)] * (MAX_N_RUNS_KEYS + 1))
+    with pytest.raises(ValueError, match="n_runs_distribution"):
+        n_runs_decomposition(rs, all_keys=True, include_zero=True)
+    with pytest.raises(ValueError, match="single string"):
+        n_runs_decomposition(rs, level="protein_group", keys="sp|P12345")
+    with pytest.raises(ValueError, match="pair"):
+        n_runs_decomposition(rs, keys=["PEPTIDE"])
+    with pytest.raises(ValueError, match="string"):
+        n_runs_decomposition(rs, level="protein_group", keys=[3])
+    # At the bound the call still answers; keys without a target row give no row.
+    at_bound = n_runs_decomposition(rs, keys=[(f"X{i}", 2) for i in range(MAX_N_RUNS_KEYS)])
+    assert at_bound.empty
+
+
+def test_n_runs_duckdb_error_is_a_viewer_error(fixture_dir, tmp_path, monkeypatch):
+    rs = open_results(_copy(fixture_dir("mbr"), tmp_path / "exp"))
+    real = mbr_module.execute_bound
+
+    def failing(duck, sql, params):
+        if " p AS (" in sql:
+            raise duckdb.OutOfMemoryException("Out of Memory Error: could not allocate")
+        return real(duck, sql, params)
+
+    monkeypatch.setattr(mbr_module, "execute_bound", failing)
+    for call in (
+        lambda: n_runs_decomposition(rs, all_keys=True),
+        lambda: n_runs_distribution(rs),
+    ):
+        with pytest.raises(ViewerError, match=r"scored_combined\.parquet") as err:
+            call()
+        assert "OutOfMemoryException" in str(err.value) and "rows" in str(err.value)
 
 
 def test_mbr_info_is_frozen(open_fixture):
@@ -417,7 +570,8 @@ def test_entrapment_native_counts_match_the_per_run_counts(fixture_dir, tmp_path
     assert "not in native_psms" in labels["spike_in_psms"]
     assert "spike-ins included" in labels["native_or_transferred"]
     assert "Every transfer matches" in counts.attrs["note"]
-    assert "spike-ins are included" in n_runs_decomposition(rs, 0.01).attrs["note"]
+    assert "spike-ins are included" in n_runs_decomposition(rs, 0.01, all_keys=True).attrs["note"]
+    assert "spike-ins are included" in n_runs_distribution(rs, 0.01).attrs["note"]
 
 
 def test_decoy_mode_native_counts_have_no_spike_in_column(open_fixture):
@@ -438,13 +592,18 @@ def test_real_experiment_native_counts_and_n_runs(real_experiment):
     counts = transfer_counts(rs, 0.01)
     counts_time = time.perf_counter() - start
     start = time.perf_counter()
-    dec = n_runs_decomposition(rs, 0.01)
+    dec = n_runs_decomposition(rs, 0.01, all_keys=True)
     dec_time = time.perf_counter() - start
+    start = time.perf_counter()
+    dist = n_runs_distribution(rs, 0.01)
+    dist_time = time.perf_counter() - start
     print(
         f"\n{real_experiment}: MBR ran {info.ran}; native PSMs per run "
         f"{list(counts['native_psms'])}; transfer_counts {counts_time:.3f} s, "
-        f"n_runs_decomposition {dec_time:.3f} s ({len(dec):,} precursors)"
+        f"n_runs_decomposition(all_keys) {dec_time:.3f} s ({len(dec):,} precursors), "
+        f"n_runs_distribution {dist_time:.3f} s"
     )
+    assert int(dist["engine"].sum()) == len(dec)
     peptides = _tsv(Path(real_experiment) / "peptides.tsv")
     merged = peptides.merge(
         dec, left_on=["precursor", "charge"], right_on=["peptidoform", "charge"], how="left"

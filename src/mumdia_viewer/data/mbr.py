@@ -29,9 +29,11 @@ shown as a separate, labelled number.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import duckdb
 import numpy as np
 import pandas as pd
 
@@ -44,14 +46,20 @@ from .reports import normalise_enum
 from .units import check_threshold, execute_bound, format_threshold, run_key
 
 __all__ = [
+    "MAX_N_RUNS_KEYS",
     "MbrInfo",
     "mbr_info",
     "mbr_ran",
     "n_runs_decomposition",
+    "n_runs_distribution",
     "transfer_counts",
     "transfer_of",
     "transfers_for_run",
 ]
+
+# The most keys n_runs_decomposition decomposes in one call; the same bound as
+# counts.MAX_WINNER_KEYS (counts imports this module, so the value is repeated here).
+MAX_N_RUNS_KEYS = 10_000
 
 _EMPTY_TRANSFERS = (
     "SELECT CAST(NULL AS UINTEGER) AS source, CAST(NULL AS UINTEGER) AS candidate_id WHERE false"
@@ -579,11 +587,129 @@ def _report_threshold(rs: ResultSet) -> tuple[float, str]:
     return 0.01, "the viewer default; the manifest records no report threshold"
 
 
+_LEVEL_KEYS: dict[str, tuple[str, ...]] = {
+    "precursor": ("peptidoform", "charge"),
+    "protein_group": ("protein_group",),
+}
+_LEVEL_UNITS: dict[str, str] = {
+    "precursor": "precursors (unique (peptidoform, charge), label = 'target')",
+    "protein_group": "protein groups (unique non-empty protein_group, label = 'target')",
+}
+
+
+def _check_level(level: str) -> tuple[str, ...]:
+    if level not in _LEVEL_KEYS:
+        raise ValueError(f"level must be 'precursor' or 'protein_group', not {level!r}.")
+    return _LEVEL_KEYS[level]
+
+
+def _n_runs_key_filter(level: str, keys: list[Any]) -> tuple[str, dict[str, Any]]:
+    """A semi-join on the given keys (a hash join in DuckDB; the lists bind even when empty)."""
+    if level == "protein_group":
+        values = []
+        for v in keys:
+            if not isinstance(v, str):
+                raise ValueError(f"a protein_group key is a string, not {v!r}.")
+            values.append(v)
+        return (
+            " AND protein_group IN (SELECT unnest(CAST($keys AS VARCHAR[])))",
+            {"keys": values},
+        )
+    pairs: list[tuple[str, int]] = []
+    for v in keys:
+        try:
+            peptidoform, charge = v
+            pairs.append((str(peptidoform), int(charge)))
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"a precursor key is a (peptidoform, charge) pair, not {v!r}."
+            ) from None
+    return (
+        " AND (peptidoform, CAST(charge AS BIGINT)) IN (SELECT (unnest(CAST($key_peptidoforms "
+        "AS VARCHAR[])), unnest(CAST($key_charges AS BIGINT[]))))",
+        {"key_peptidoforms": [p for p, _ in pairs], "key_charges": [c for _, c in pairs]},
+    )
+
+
+def _n_runs_threshold(rs: ResultSet, t: float | None) -> tuple[float, float, str]:
+    """The threshold to use, the report threshold and where the report threshold was read."""
+    report_t, report_source = _report_threshold(rs)
+    return check_threshold("run_psm", report_t if t is None else t), report_t, report_source
+
+
+def _presence_sql(
+    rs: ResultSet, level: str, t: float, *, include_zero: bool, key_where: str = ""
+) -> tuple[str, dict[str, Any]]:
+    """CTEs ending in ``p``: one row per (key, source) with ``native`` and ``accepted``.
+
+    ``native`` is a target row at ``run_psm_q <= t`` in ``scored_combined.parquet``;
+    ``accepted`` is native or transferred (the TSV's rule). The (key, source) relation is
+    de-duplicated with a GROUP BY, so the counts per key are plain ``count(*)``
+    aggregates that DuckDB can spill to disk (``count(DISTINCT ...)`` cannot). Without
+    ``include_zero`` only accepted rows enter the relation, which keeps it small.
+    """
+    keycols = ", ".join(_LEVEL_KEYS[level])
+    nonempty = " AND protein_group <> ''" if level == "protein_group" else ""
+    info = mbr_info(rs)
+    rel = _transfer_relation(rs, info)
+    rel_sql, rel_params = rel if rel is not None else (_EMPTY_TRANSFERS, {})
+    accepted_only = "" if include_zero else " WHERE x.native OR x.is_tr"
+    sql = (
+        f"WITH s AS (SELECT source, candidate_id, {keycols}, run_psm_q FROM "
+        f"read_parquet($scored) WHERE label = 'target'{nonempty}{key_where}), "
+        f"tr AS ({rel_sql}), "
+        f"x AS (SELECT {', '.join('s.' + k for k in _LEVEL_KEYS[level])}, s.source, "
+        "coalesce(s.run_psm_q <= $t, false) AS native, tr.candidate_id IS NOT NULL AS is_tr "
+        "FROM s LEFT JOIN tr USING (source, candidate_id)), "
+        f"p AS (SELECT {keycols}, source, bool_or(native) AS native, "
+        f"bool_or(native OR is_tr) AS accepted FROM x{accepted_only} GROUP BY {keycols}, source)"
+    )
+    return sql, {"scored": sql_path(rs.scored.require()), "t": t, **rel_params}
+
+
+def _run_presence(rs: ResultSet, sql: str, params: dict[str, Any], what: str) -> pd.DataFrame:
+    """Run a presence query; a DuckDB failure becomes a ViewerError that names the table."""
+    try:
+        return execute_bound(rs.duck, sql, params).df()
+    except duckdb.Error as exc:
+        rows = rs.scored.rows
+        size = f"{rows:,} rows" if rows is not None else "an unknown number of rows"
+        name = rs.scored.path.name if rs.scored.path is not None else rs.scored.key
+        raise ViewerError(
+            f"{what} failed on the pooled scored table {name} ({size}): {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+def _n_runs_labels(level: str, t: float, report_t: float, source: str) -> dict[str, str]:
+    tt = format_threshold(t)
+    report_tt = format_threshold(report_t)
+    tsv = "peptides.tsv" if level == "precursor" else "proteins.tsv"
+    engine = f"runs with run_psm_q <= {tt} or a transfer (the TSV's n_runs rule)"
+    if t == report_t:
+        engine += f"; {tt} is the report threshold ({source})"
+    else:
+        engine += f"; it equals {tsv} n_runs only at the report threshold ({report_tt}, {source})"
+    return {
+        "n_runs_native": f"runs with a target row at run_psm_q <= {tt} in "
+        "scored_combined.parquet (PSM-level FDR within each run)",
+        "n_runs_transfer_only": "further runs in which the key was only transferred by MBR",
+        "n_runs_engine": engine,
+    }
+
+
+def _spike_note(rs: ResultSet) -> str:
+    if count_classes(rs).spike_present:
+        return "The rule counts label = 'target' rows, so spike-ins are included, as in the TSV."
+    return ""
+
+
 def n_runs_decomposition(
     rs: ResultSet,
     t: float | None = None,
     *,
     level: str = "precursor",
+    keys: Iterable[Any] | None = None,
+    all_keys: bool = False,
     include_zero: bool = False,
 ) -> pd.DataFrame:
     """The TSV's ``n_runs`` rule at a threshold, split into native and transfer runs.
@@ -597,78 +723,153 @@ def n_runs_decomposition(
     * ``n_runs_engine``: their sum, the engine's rule (``run_psm_q <= t`` or
       transferred).
 
+    The result has one row per key, so the keys are bounded: ``keys`` names at most
+    :data:`MAX_N_RUNS_KEYS` keys (``(peptidoform, charge)`` pairs or protein_group
+    strings; a key without a target row gets no row). One row per key of the whole
+    pooled table needs the explicit opt-in ``all_keys=True``: that is one row per
+    accepted key (142,668 precursors in a six-run Astral experiment). For the number of
+    keys at each n_runs use :func:`n_runs_distribution`, which returns no per-key rows.
+
     ``t`` defaults to the report threshold (``experiment.report.q_threshold``, else
     ``quant.q_threshold``, else 0.01). ``n_runs_engine`` equals the ``n_runs`` column of
     ``peptides.tsv`` (``proteins.tsv`` for protein groups) only at that threshold, and
     the label says so. Keys with ``n_runs_engine = 0`` are left out unless
-    ``include_zero`` is True. These are PSM-level acceptances per run, not precursor- or
-    protein-level FDR. Like the TSV, the rule keeps spike-ins in entrapment runs.
+    ``include_zero`` is True, which is allowed with ``keys`` only. These are PSM-level
+    acceptances per run, not precursor- or protein-level FDR. Like the TSV, the rule
+    keeps spike-ins in entrapment runs. A DuckDB failure raises :class:`ViewerError`.
     """
-    if level not in ("precursor", "protein_group"):
-        raise ValueError(f"level must be 'precursor' or 'protein_group', not {level!r}.")
-    report_t, report_source = _report_threshold(rs)
-    t = check_threshold("run_psm", report_t if t is None else t)
+    names = _check_level(level)
+    if keys is not None and all_keys:
+        raise ValueError("pass keys or all_keys=True, not both.")
+    if keys is None and not all_keys:
+        raise ValueError(
+            "n_runs_decomposition returns one row per key, so it needs the keys to decompose "
+            f"(at most {MAX_N_RUNS_KEYS:,} (peptidoform, charge) pairs or protein_group "
+            "strings), or the explicit opt-in all_keys=True for every accepted key of the "
+            "pooled table. n_runs_distribution gives the number of keys per n_runs without "
+            "per-key rows."
+        )
+    key_where, key_params = "", {}
+    if keys is not None:
+        if isinstance(keys, str | bytes | Mapping):
+            raise ValueError(
+                "keys must be a collection of keys, not a single string or a mapping; "
+                "pass [key] for one key."
+            )
+        values = list(keys)
+        if len(values) > MAX_N_RUNS_KEYS:
+            raise ValueError(
+                f"n_runs_decomposition takes at most {MAX_N_RUNS_KEYS:,} keys (got "
+                f"{len(values):,}), because it returns one row per key. Use "
+                "n_runs_distribution for the number of keys per n_runs."
+            )
+        key_where, key_params = _n_runs_key_filter(level, values)
+    elif include_zero:
+        raise ValueError(
+            "include_zero with all_keys=True would return one row per target key of the "
+            "pooled table. Pass keys, or use n_runs_distribution(include_zero=True)."
+        )
+    t, report_t, report_source = _n_runs_threshold(rs, t)
+    presence, params = _presence_sql(rs, level, t, include_zero=include_zero, key_where=key_where)
+    params.update(key_params)
+    keycols = ", ".join(names)
+    sql = (
+        f"{presence} SELECT {keycols}, count(*) FILTER (WHERE native) AS n_runs_native, "
+        "count(*) FILTER (WHERE accepted) AS n_runs_engine "
+        f"FROM p GROUP BY {keycols} ORDER BY {keycols}"
+    )
+    df = _run_presence(rs, sql, params, "n_runs_decomposition")
+    df["n_runs_native"] = df["n_runs_native"].astype("int64")
+    df["n_runs_engine"] = df["n_runs_engine"].astype("int64")
+    df["n_runs_transfer_only"] = df["n_runs_engine"] - df["n_runs_native"]
+    df = df[[*names, "n_runs_native", "n_runs_transfer_only", "n_runs_engine"]]
+    df.attrs.update(
+        {
+            "threshold": t,
+            "report_threshold": report_t,
+            "level": level,
+            "labels": _n_runs_labels(level, t, report_t, report_source),
+            "note": _spike_note(rs),
+            "sql": sql,
+        }
+    )
+    return df
+
+
+def n_runs_distribution(
+    rs: ResultSet,
+    t: float | None = None,
+    *,
+    level: str = "precursor",
+    include_zero: bool = False,
+) -> pd.DataFrame:
+    """The number of keys at each n_runs, for the three columns of :func:`n_runs_decomposition`.
+
+    One row per ``n_runs`` value from 0 to the number of runs. ``native``,
+    ``transfer_only`` and ``engine`` count the keys whose ``n_runs_native``,
+    ``n_runs_transfer_only`` or ``n_runs_engine`` equals ``n_runs``. The keys are the
+    keys with ``n_runs_engine > 0``, or with ``include_zero`` every key with a
+    ``label = 'target'`` row. No per-key row is returned, so the result has at most
+    ``n_runs + 1`` rows at any table size. The threshold and the labels are those of
+    :func:`n_runs_decomposition`; ``attrs['unit']`` names the counted keys.
+    """
+    names = _check_level(level)
+    t, report_t, report_source = _n_runs_threshold(rs, t)
     info = mbr_info(rs)
-    key = (
-        "mbr_n_runs",
+    memo = (
+        "mbr_n_runs_distribution",
         rs.scored.identity(),
         _transfers_identity(info),
         t,
         level,
         include_zero,
     )
-    if key in rs._memo:
-        return rs._memo[key].copy()
-    keys = ["peptidoform", "charge"] if level == "precursor" else ["protein_group"]
-    keycols = ", ".join(keys)
-    nonempty = " AND protein_group <> ''" if level == "protein_group" else ""
-    rel = _transfer_relation(rs, info)
-    rel_sql, rel_params = rel if rel is not None else (_EMPTY_TRANSFERS, {})
-    params: dict[str, Any] = {"scored": sql_path(rs.scored.require()), "t": t, **rel_params}
-    having = "" if include_zero else " HAVING n_runs_engine > 0"
+    if memo in rs._memo:
+        return rs._memo[memo].copy()
+    presence, params = _presence_sql(rs, level, t, include_zero=include_zero)
+    keycols = ", ".join(names)
     sql = (
-        f"WITH s AS (SELECT source, candidate_id, {keycols}, run_psm_q FROM "
-        f"read_parquet($scored) WHERE label = 'target'{nonempty}), tr AS ({rel_sql}), "
-        "x AS (SELECT s.*, tr.candidate_id IS NOT NULL AS is_tr, s.run_psm_q <= $t AS native "
-        "FROM s LEFT JOIN tr USING (source, candidate_id)) "
-        f"SELECT {keycols}, count(DISTINCT source) FILTER (WHERE native) AS n_runs_native, "
-        "count(DISTINCT source) FILTER (WHERE native OR is_tr) AS n_runs_engine "
-        f"FROM x GROUP BY {keycols}{having} ORDER BY {keycols}"
+        f"{presence}, k AS (SELECT count(*) FILTER (WHERE native) AS n_native, "
+        f"count(*) FILTER (WHERE accepted) AS n_engine FROM p GROUP BY {keycols}) "
+        "SELECT n_native, n_engine, count(*) AS n_keys FROM k GROUP BY 1, 2 ORDER BY 1, 2"
     )
-    df = execute_bound(rs.duck, sql, params).df()
-    df["n_runs_native"] = df["n_runs_native"].astype("int64")
-    df["n_runs_engine"] = df["n_runs_engine"].astype("int64")
-    df["n_runs_transfer_only"] = df["n_runs_engine"] - df["n_runs_native"]
-    df = df[[*keys, "n_runs_native", "n_runs_transfer_only", "n_runs_engine"]]
-    tt = format_threshold(t)
-    report_tt = format_threshold(report_t)
-    tsv = "peptides.tsv" if level == "precursor" else "proteins.tsv"
-    engine_label = f"runs with run_psm_q <= {tt} or a transfer (the TSV's n_runs rule)"
-    if t == report_t:
-        engine_label += f"; {tt} is the report threshold ({report_source})"
-    else:
-        engine_label += (
-            f"; it equals {tsv} n_runs only at the report threshold ({report_tt}, {report_source})"
-        )
-    notes = []
-    if count_classes(rs).spike_present:
-        notes.append(
-            "The rule counts label = 'target' rows, so spike-ins are included, as in the TSV."
-        )
+    joint = _run_presence(rs, sql, params, "n_runs_distribution")
+    native = joint["n_native"].to_numpy(dtype=np.int64)
+    engine = joint["n_engine"].to_numpy(dtype=np.int64)
+    weight = joint["n_keys"].to_numpy(dtype=np.int64)
+    size = max([len(rs.runs), *native.tolist(), *engine.tolist()]) + 1
+
+    def histogram(values: np.ndarray) -> np.ndarray:
+        return np.bincount(values, weights=weight, minlength=size).astype(np.int64)
+
+    df = pd.DataFrame(
+        {
+            "n_runs": np.arange(size, dtype=np.int64),
+            "native": histogram(native),
+            "transfer_only": histogram(engine - native),
+            "engine": histogram(engine),
+        }
+    )
+    unit = _LEVEL_UNITS[level]
+    population = (
+        "every key with a label = 'target' row" if include_zero else "keys with n_runs_engine > 0"
+    )
+    labels = _n_runs_labels(level, t, report_t, report_source)
     df.attrs.update(
         {
             "threshold": t,
             "report_threshold": report_t,
             "level": level,
+            "unit": f"{unit}; {population}",
             "labels": {
-                "n_runs_native": f"runs with a target row at run_psm_q <= {tt} in "
-                "scored_combined.parquet (PSM-level FDR within each run)",
-                "n_runs_transfer_only": "further runs in which the key was only transferred by MBR",
-                "n_runs_engine": engine_label,
+                "native": f"{unit} with n_runs_native = n_runs ({labels['n_runs_native']})",
+                "transfer_only": f"{unit} with n_runs_transfer_only = n_runs "
+                f"({labels['n_runs_transfer_only']})",
+                "engine": f"{unit} with n_runs_engine = n_runs ({labels['n_runs_engine']})",
             },
-            "note": " ".join(notes),
+            "note": _spike_note(rs),
             "sql": sql,
         }
     )
-    rs._memo[key] = df.copy()
+    rs._memo[memo] = df.copy()
     return df

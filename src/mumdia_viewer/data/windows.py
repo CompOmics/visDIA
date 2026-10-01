@@ -430,13 +430,18 @@ def _precursor_check(rs: ResultSet, run: Run, library: Artifact) -> tuple[str | 
     return None, f"precursor_mz agrees at {total} sampled library-wide ids of {names}"
 
 
+# A full aggregate, not DISTINCT ... LIMIT 2: a query that stops its scans early leaves
+# the parquet readers open on the thread's DuckDB cursor until its next statement, and on
+# Windows an open file blocks the engine from replacing it.
 _SEED_JOIN = """
-SELECT DISTINCT CAST(g.candidate_id AS BIGINT) - CAST(b.candidate_id AS BIGINT) AS d
-FROM read_parquet(?) AS b
-JOIN read_parquet(?) AS g
-  ON b.scan_index = g.scan_index AND b.score = g.score
- AND b.peptidoform = g.peptidoform AND b.charge = g.charge
-LIMIT 2
+SELECT count(*) AS n, min(d) AS lo, max(d) AS hi
+FROM (
+  SELECT CAST(g.candidate_id AS BIGINT) - CAST(b.candidate_id AS BIGINT) AS d
+  FROM read_parquet(?) AS b
+  JOIN read_parquet(?) AS g
+    ON b.scan_index = g.scan_index AND b.score = g.score
+   AND b.peptidoform = g.peptidoform AND b.charge = g.charge
+)
 """
 
 
@@ -459,11 +464,12 @@ def _seed_offset(rs: ResultSet, run: Run, band: Band) -> tuple[int | None, str]:
     except ViewerError as exc:
         return None, f"a seed_psms.parquet cannot be read ({exc})"
     rows = rs.duck.rows(_SEED_JOIN, [sql_path(band_seed.path), sql_path(run_seed.path)])
-    if not rows or rows[0][0] is None:
+    n, lo, hi = rows[0] if rows else (0, None, None)
+    if not n or lo is None or hi is None:
         return None, "no band seed row joins a run-level seed row"
-    if len(rows) != 1:
+    if lo != hi:
         return None, "the band and run-level seed rows do not differ by one constant id offset"
-    return int(rows[0][0]), ""
+    return int(lo), ""
 
 
 _SEED_METHOD = (

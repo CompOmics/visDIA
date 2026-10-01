@@ -75,7 +75,9 @@ class RowGroupCache:
         return self._bytes
 
 
-ROW_GROUP_CACHE = RowGroupCache()
+# 256 MB: with the spectrum cache (96 MB) and DuckDB's 512 MB limit the fixed caches stay
+# near 0.9 GB, well inside the 2 GB process target.
+ROW_GROUP_CACHE = RowGroupCache(max_bytes=256 * 1024 * 1024)
 
 
 class ParquetHandle:

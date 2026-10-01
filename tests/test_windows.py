@@ -333,6 +333,40 @@ def test_inferred_offset_must_hold_the_band_tables(fixture_dir, tmp_path):
     assert "outside the row span [1735, 3337)" in str(err.value)
 
 
+def test_seed_join_leaves_no_seed_table_open(fixture_dir, tmp_path):
+    """Review constraints #7: the seed join is a full aggregate, not DISTINCT ... LIMIT 2.
+
+    A query that stops its scan early leaves the parquet reader open on the thread's
+    DuckDB cursor, and on Windows the engine then cannot replace the file by rename. The
+    last band (g02) gets two id offsets, so its join is the last query and finds a
+    second offset early. Every seed table is then replaced as the engine does.
+    """
+    run_dir = copy_run(fixture_dir, "ovl_bp", tmp_path)
+    os.remove(run_dir / "fragment_library_precursors.parquet")
+    seed_path = run_dir / "groups" / "g02" / "seed_psms.parquet"
+    seed = pq.read_table(seed_path)
+    ids = seed.column("candidate_id").to_numpy().astype(np.uint32)
+    ids[1::2] += np.uint32(5)
+    pq.write_table(seed.set_column(0, "candidate_id", pa.array(ids, pa.uint32())), seed_path)
+    forget_hash(run_dir, "seed_psms[g02]", "groups/g02/seed_psms.parquet")
+    rs = open_results(run_dir)
+    run = rs.runs[0]
+    offsets = band_offsets(rs, run)
+    assert {k: tuple(v) for k, v in offsets.items()} == {
+        k: v for k, v in OFFSETS["ovl_bp"].items() if k != "g02"
+    }
+    seeds = [run_dir / "seed_psms.parquet"]
+    seeds += [run_dir / "groups" / band / "seed_psms.parquet" for band in ("g00", "g01", "g02")]
+    for path in seeds:
+        spare = path.with_name("seed_psms.replacement.parquet")
+        shutil.copy2(path, spare)
+        os.replace(spare, path)  # raises PermissionError on Windows while a reader is open
+    src = ChromatogramSource.for_run(rs, run)
+    cid = next(c for c in src.candidate_ids().tolist() if src.band_of(c) == "g02")
+    with pytest.raises(ArtifactNotFound, match="do not differ by one constant id offset"):
+        rt_window(rs, run, cid)
+
+
 # --------------------------------------------------------------------------- grouped windows
 
 

@@ -322,10 +322,19 @@ class _Builder:
     def _version(
         self, kind: str, record: ArtifactRecord | None, report: Report | None
     ) -> VersionInfo:
-        if record is not None and record.schema_version is not None:
-            return VersionInfo(record.schema_name or kind, record.schema_version, "manifest")
-        if report is not None and report.schema_version is not None:
-            return VersionInfo(report.schema_name or kind, report.schema_version, "report")
+        """The recorded version: the report's when it disagrees with the manifest.
+
+        The report is written together with the file (a single-stage re-run rewrites the
+        table and its report, not manifest.json), so it describes the file on disk.
+        """
+        rec_v = record.schema_version if record is not None else None
+        rep_v = report.schema_version if report is not None else None
+        if rep_v is not None and rec_v is not None and rep_v != rec_v:
+            return VersionInfo(report.schema_name or kind, rep_v, "report")
+        if rec_v is not None:
+            return VersionInfo(record.schema_name or kind, rec_v, "manifest")
+        if rep_v is not None:
+            return VersionInfo(report.schema_name or kind, rep_v, "report")
         return VersionInfo(kind, None, "unrecorded")
 
     def finish(self, artifact: Artifact) -> Artifact:
@@ -347,8 +356,21 @@ class _Builder:
                 self.notice(
                     "version_mismatch",
                     f"{artifact.key}: the manifest records version {rec.schema_version}, the "
-                    f"report version {rep.schema_version}.",
+                    f"report next to the file version {rep.schema_version}; the report's version "
+                    "is used, because the report is written with the file.",
                 )
+                # Refuse when the manifest's version is not readable either, so that a stale
+                # manifest cannot hide an unsupported file or the reverse.
+                try:
+                    check_version(
+                        artifact.kind,
+                        rec.schema_version,
+                        where=where,
+                        allow_unreleased=self.allow_unreleased,
+                    )
+                except SchemaVersionError as exc:
+                    artifact.error = str(exc)
+                    self.notice("unsupported_version", str(exc))
         if artifact.present:
             try:
                 artifact.infer_version_if_unrecorded()
@@ -576,7 +598,7 @@ def open_results(
         raise NotAResultDirectory(f"{root} is not a directory.")
     cache = cache or Cache()
     cache.forbid(root)
-    duck = duck or DuckDB(temp_directory=cache.temp_dir() if cache.writable else None)
+    duck = duck or DuckDB(temp_directory=cache.temp_dir())
     if (root / "experiment_manifest.json").is_file():
         manifest = load_manifest(root / "experiment_manifest.json")
         rs = _open_experiment(root, manifest, remaps, allow_unreleased, cache, duck)
@@ -743,10 +765,13 @@ def _open_experiment(
                 found = b.from_path("lfq_maxlfq_sibling", f"lfq_maxlfq.{level}", sib)
                 if found is not None:
                     extra[f"lfq_maxlfq_{level}"] = found
-    mbr_table = b.from_path("mbr_transferred", "mbr_transferred", root / "mbr_transferred.parquet")
-    if mbr_table is not None:
-        extra["mbr_transferred"] = mbr_table
     mbr_strategy = str(exp.get("mbr", "None"))
+    if mbr_strategy != "None":
+        mbr_table = b.from_path(
+            "mbr_transferred", "mbr_transferred", root / "mbr_transferred.parquet"
+        )
+        if mbr_table is not None:
+            extra["mbr_transferred"] = mbr_table
     stale = [
         name
         for name in ("mbr_transferred.parquet", "scored_mbr.parquet")

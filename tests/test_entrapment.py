@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import shutil
+from collections.abc import Mapping
 from pathlib import Path
 
 import pyarrow as pa
@@ -28,17 +30,21 @@ from mumdia_viewer.data.counts import (
     score_histogram,
     unit_counts,
 )
+from mumdia_viewer.data.duck import sql_path
 from mumdia_viewer.data.entrapment import (
     DEFAULT_RATIO,
     EntrapmentSettings,
     class_breakdown,
     class_sql,
     count_classes,
+    entrapment_expr,
+    entrapment_expr_positional,
     entrapment_fdp,
     fdp_value,
     markers_present,
     markers_recorded,
     settings_for,
+    spike_in_condition,
 )
 from mumdia_viewer.data.hashing import blake3_file
 from mumdia_viewer.data.rescore import rescore_info
@@ -444,6 +450,59 @@ def test_no_markers_means_no_fdp(open_fixture):
     assert not markers_present(rs)
     assert entrapment_fdp(rs, 0.01) == []
     assert class_breakdown(rs)["spike_in_rows"] == 0
+    assert spike_in_condition(rs, "w") == ("false", [])
+
+
+def test_markers_present_leaves_no_reader_open(fixture_dir, tmp_path):
+    """Review constraints #7: the marker test is a full aggregate, not ``LIMIT 1``.
+
+    A scan that stops early leaves the parquet reader open on the thread's DuckDB cursor
+    until its next statement, and on Windows the engine then cannot replace the file by
+    rename (PermissionError). The engine's replace must succeed right after the call.
+    """
+    config = json.loads((TOOLS / "config.entrap_mode.json").read_text(encoding="utf-8"))
+    root = _manifest_dir(fixture_dir("entrapment"), tmp_path / "run", config=config)
+    rs = open_results(root)
+    assert markers_present(rs)
+    target = root / "psms_scored.parquet"
+    spare = tmp_path / "psms_scored.replacement.parquet"
+    shutil.copy2(target, spare)
+    os.replace(spare, target)
+    assert not markers_present(rs, EntrapmentSettings(marker="NO_SUCH_MARKER_"))
+    shutil.copy2(target, spare)
+    os.replace(spare, target)
+
+
+@pytest.mark.parametrize("recorded", [True, False])
+def test_every_form_of_the_spike_in_test_selects_the_same_rows(
+    fixture_dir, tmp_path, entrap_table, recorded
+):
+    """The named, aliased and positional forms flag the rows of count_classes (pyarrow)."""
+    config = json.loads((TOOLS / "config.entrap_mode.json").read_text(encoding="utf-8"))
+    rs = open_results(
+        _manifest_dir(
+            fixture_dir("entrapment"), tmp_path / "run", config=config if recorded else None
+        )
+    )
+    cls = count_classes(rs)
+    assert cls.spike_present and cls.markers_recorded == recorded
+    _, spike, _ = _classes(entrap_table, contaminants=CONTAMINANTS if recorded else ())
+    expected = set(pc.indices_nonzero(spike).to_pylist())
+    path = sql_path(rs.scored.path)
+
+    def rows(where: str, params) -> set[int]:
+        sql = f"SELECT file_row_number FROM read_parquet(?, file_row_number = true) w WHERE {where}"
+        if isinstance(params, Mapping):
+            sql = sql.replace("read_parquet(?", "read_parquet($path")
+            return {r[0] for r in rs.duck.rows(sql, bind_params(sql, {**params, "path": path}))}
+        return {r[0] for r in rs.duck.rows(sql, [path, *params])}
+
+    assert rows(cls.spike, cls.params) == expected
+    named, named_params = entrapment_expr(cls.settings, alias="w")
+    assert "w.protein" in named and rows(named, named_params) == expected
+    text, params = entrapment_expr_positional(cls.settings, alias="w")
+    assert "$" not in text and rows(text, params) == expected
+    assert spike_in_condition(rs, "w") == (text, params)
 
 
 # --------------------------------------------------------------------------- winners
