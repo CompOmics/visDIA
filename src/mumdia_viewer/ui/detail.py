@@ -50,6 +50,7 @@ from . import detail_figures as dfig
 from . import detail_ions as ions
 from . import detail_preview as pv
 from . import detail_view as view
+from .icons import icon
 from .notes import note_card
 from .state import PageContext, href, parse_threshold
 from .widgets import section
@@ -271,6 +272,71 @@ def preview(ctx: PageContext, run: str, cid: int) -> Any:
     return pv.preview_card(ctx, d, run, frags, grid, m, why)
 
 
+# --------------------------------------------------------------------------- related pages
+
+
+def related_links(ctx: PageContext, run: str, d: PrecursorDetail) -> Any:
+    """Links to the views of the same precursor: its protein, its scan, its other runs."""
+    s = d.scored
+    group = str(s.get("protein_group") or "")
+    items: list[tuple[str, str, str, str]] = []
+    if group and not group.startswith("DECOY_"):
+        items.append(
+            (
+                "layers",
+                "Protein page",
+                href(ctx.base, "protein", {"group": group}),
+                f"The protein group {group}: its peptides, quantities and coverage",
+            )
+        )
+    if d.apex_scan is not None:
+        items.append(
+            (
+                "spectrum",
+                "Spectrum browser",
+                href(ctx.base, "spectra", {"run": run, "scan": int(d.apex_scan.scan_index)}),
+                "The apex scan in the spectrum browser, with the other candidates near it",
+            )
+        )
+    if ctx.rs.is_experiment and s.get("peptidoform"):
+        items.append(
+            (
+                "layers",
+                "Across runs",
+                href(
+                    ctx.base,
+                    "runs",
+                    {"peptidoform": s.get("peptidoform"), "charge": s.get("charge")},
+                ),
+                "This precursor in every run of the experiment: XICs, quantities and q values",
+            )
+        )
+    if not items:
+        return None
+    return dmc.Group(
+        [
+            dmc.Tooltip(
+                dcc.Link(
+                    dmc.Badge(
+                        label,
+                        leftSection=icon(name, 12),
+                        variant="light",
+                        color="gray",
+                        size="lg",
+                        radius="xl",
+                        style={"textTransform": "none", "cursor": "pointer"},
+                    ),
+                    href=target,
+                ),
+                label=tip,
+            )
+            for name, label, target, tip in items
+        ],
+        gap="xs",
+        className="pd-related",
+    )
+
+
 # --------------------------------------------------------------------------- coverage
 
 
@@ -402,6 +468,7 @@ def layout(ctx: PageContext) -> Any:
         ]
     page = [
         cards.hero(ctx, d, frags),
+        related_links(ctx, run, d),
         cards.verdict(ctx, d, tiles),
         note_card(ctx, run, int(cid), dict(d.scored)),
         cards.notes(d),
