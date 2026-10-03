@@ -399,7 +399,6 @@ def layout(ctx: PageContext) -> Any:
             lfq_keys["protein"] = Q.quant_matrix(rs, "protein", "lfq").n_keys
     states_body, states_sub = states_answer(rs, t)
     stores = [
-        dcc.Store(id=CONDITIONS_STORE, storage_type="local"),
         dcc.Store(id="qq-suggest", data=suggestion),
         dcc.Store(id="qq-palette", data=list(SERIES)),
         dcc.Store(id="qq-addr"),

@@ -15,7 +15,7 @@ from mumdia_viewer.ui.app import create_app
 from mumdia_viewer.ui.state import PageContext
 
 FIXTURES = ["single", "experiment", "mbr", "grouped", "topk"]
-SHELL = {"threshold", "scheme", "url", "q-select", "templates", "recent", "page"}
+SHELL = {"threshold", "scheme", "url", "q-select", "templates", "recent", "page", "mv-conditions"}
 
 
 def _walk(node):
@@ -49,9 +49,8 @@ def test_layout_builds_with_unique_ids(open_fixture, name):
     tree = _layout(rs)
     ids = _ids(tree)
     assert len(ids) == len(set(ids)), [i for i in ids if ids.count(i) > 1]
-    stores = [c for c in _walk(tree) if getattr(c, "id", None) == "mv-conditions"]
-    assert len(stores) == 1 and stores[0].storage_type == "local"
-    assert getattr(stores[0], "data", None) is None  # the browser's value wins
+    # The conditions store lives in the app shell (shared with the ratio view).
+    assert not [c for c in _walk(tree) if getattr(c, "id", None) == "mv-conditions"]
     graphs = [c for c in _walk(tree) if type(c).__name__ == "Graph"]
     assert graphs and all(isinstance(g.id, dict) and g.id["type"] == "fig" for g in graphs)
     text = _text(tree)
