@@ -1,0 +1,318 @@
+/* Quant QC page (ids and classes start with qq-). */
+
+.qq-root {
+  container-type: inline-size;
+}
+
+/* ---------------------------------------------------------------- header */
+.qq-hero > .qq-hero-left {
+  flex: 1 1 440px;
+  min-width: 0;
+}
+.qq-facts {
+  flex-shrink: 0;
+}
+.qq-fact {
+  min-width: 112px;
+}
+.qq-fact-label {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+.qq-fact-value {
+  font-size: 1.12rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.qq-fhead {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.qq-derived {
+  font-size: 0.6rem;
+  font-weight: 650;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--mantine-color-grape-light);
+  color: var(--mantine-color-grape-light-color);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ---------------------------------------------------------------- toolbar */
+.qq-tools {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  row-gap: 6px;
+  padding: 0 6px;
+}
+.qq-tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.qq-tool-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  cursor: help;
+  white-space: nowrap;
+}
+.qq-t {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-indigo-light);
+  color: var(--mantine-color-indigo-light-color);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.qq-t:hover {
+  background: var(--mantine-color-indigo-light-hover);
+}
+
+/* ---------------------------------------------------------------- conditions */
+.qq-cond-table {
+  display: flex;
+  flex-direction: column;
+}
+.qq-cond-row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+.qq-cond-row:last-child {
+  border-bottom: none;
+}
+.qq-cond-head {
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--mantine-color-dimmed);
+  padding-top: 0;
+}
+.qq-run-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.qq-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--mantine-color-gray-5);
+}
+.qq-run {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.qq-file {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.7rem;
+  color: var(--mantine-color-dimmed);
+}
+.qq-cond-input input {
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- tables */
+.qq-table td,
+.qq-table th {
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.qq-table th.qq-th-cell {
+  padding: var(--table-vertical-spacing) var(--table-horizontal-spacing, var(--mantine-spacing-xs));
+  font-weight: 700;
+  text-align: left;
+  vertical-align: bottom;
+}
+.qq-table th.qq-th-cell.mv-num {
+  text-align: right;
+}
+.qq-table th.qq-group-th {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--mantine-color-dimmed);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+.qq-table th.qq-status-th .qq-th {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.72rem;
+}
+.qq-need {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--mantine-color-dimmed);
+}
+.qq-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+.qq-legend-item {
+  font-size: 0.72rem;
+}
+.qq-legend-text {
+  color: var(--mantine-color-dimmed);
+}
+.qq-table .mv-spark-cell {
+  justify-content: flex-end;
+}
+.qq-table .mv-spark-text {
+  min-width: 46px;
+  text-align: right;
+}
+.qq-th {
+  cursor: help;
+  border-bottom: 1px dotted var(--mantine-color-dimmed);
+}
+.qq-na {
+  color: var(--mantine-color-dimmed);
+  font-style: italic;
+  font-size: 0.74rem;
+}
+.qq-strong {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.qq-mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.74rem;
+}
+.qq-status {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.74rem;
+  font-weight: 650;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.qq-status-ok {
+  background: var(--mantine-color-green-light);
+  color: var(--mantine-color-green-light-color);
+}
+.qq-status-no {
+  background: var(--mantine-color-orange-light);
+  color: var(--mantine-color-orange-light-color);
+}
+.qq-status-desc {
+  font-size: 0.7rem;
+  color: var(--mantine-color-dimmed);
+  margin-top: 3px;
+  max-width: 360px;
+}
+.qq-runs-list {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.74rem;
+}
+.qq-sub {
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+.qq-cv-table {
+  margin-top: 6px;
+}
+
+/* ---------------------------------------------------------------- missing values */
+.qq-miss-single {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 4px 8px;
+}
+.qq-miss-line {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+}
+.qq-big {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- profile */
+.qq-group {
+  margin-bottom: 8px;
+}
+.qq-profile-head {
+  min-height: 46px;
+}
+.qq-pg {
+  font-family: var(--mantine-font-family-monospace);
+  font-weight: 700;
+  font-size: 0.98rem;
+}
+.qq-more {
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+  font-size: 0.8rem;
+  margin-left: 4px;
+}
+.qq-ptable td,
+.qq-ptable th {
+  font-size: 0.74rem;
+}
+.qq-open {
+  text-decoration: none;
+}
+
+.qq-cond-how {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-default-hover);
+  font-size: 0.72rem;
+  color: var(--mantine-color-dimmed);
+  line-height: 1.45;
+}
+.qq-file-cell {
+  min-width: 0;
+  overflow: hidden;
+}
+.qq-file-cell > * {
+  max-width: 100%;
+}
+.qq-states td,
+.qq-states th.qq-th-cell {
+  padding-left: 5px !important;
+  padding-right: 5px !important;
+}
+.qq-states .mv-spark-text {
+  min-width: 40px;
+}
+.qq-states .mv-spark-cell {
+  gap: 5px;
+}

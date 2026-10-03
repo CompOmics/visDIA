@@ -1,0 +1,363 @@
+/* The calibration page (ui/calibration.py): the header, the key numbers, the point bars,
+   the key-value lists and the anchor funnel. Mantine variables keep both themes. */
+
+.cal-page {
+  container-type: inline-size;
+}
+
+/* ---------------------------------------------------------------- header */
+.cal-hero {
+  row-gap: 12px;
+}
+.cal-sel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cal-sel-label {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+.cal-mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.78rem;
+}
+
+/* ---------------------------------------------------------------- key numbers */
+.cal-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+}
+.cal-fact {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 8px 12px 9px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-top-width: 3px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
+  cursor: help;
+  min-width: 0;
+}
+.cal-fact-indigo { border-top-color: var(--mantine-color-indigo-6); }
+.cal-fact-violet { border-top-color: var(--mantine-color-violet-6); }
+.cal-fact-cyan { border-top-color: var(--mantine-color-cyan-7); }
+.cal-fact-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.cal-fact-label {
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-fact-value {
+  margin-top: 2px;
+  font-size: 1.18rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+.cal-fact-sub {
+  font-size: 0.7rem;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-derived {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  height: 15px;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--mantine-color-grape-light-color);
+  background: var(--mantine-color-grape-light);
+  cursor: help;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------- card titles */
+.cal-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cal-count {
+  font-family: var(--mantine-font-family);
+  letter-spacing: 0;
+}
+
+/* ---------------------------------------------------------------- point bars */
+/* The hovered point of a scatter: one line above the plot (PeptideShaker's selection). */
+.cal-point {
+  min-height: 30px;
+  margin: -2px 0 4px;
+  padding: 4px 8px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-default-hover);
+  display: flex;
+  align-items: center;
+}
+.cal-point-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--mantine-color-dimmed);
+}
+.cal-point-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+.cal-point-items {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-width: 0;
+}
+.cal-point-pep {
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-pkv {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+.cal-pk {
+  color: var(--mantine-color-dimmed);
+}
+.cal-pv {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.cal-open {
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------- key-value lists */
+.cal-kv-list {
+  display: flex;
+  flex-direction: column;
+}
+.cal-kv {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--mantine-color-default-border);
+  font-size: 0.82rem;
+}
+.cal-kv:last-child {
+  border-bottom: none;
+}
+.cal-kv-check {
+  grid-template-columns: minmax(0, 1fr) auto 18px;
+}
+.cal-kv-label {
+  cursor: help;
+  min-width: 0;
+}
+.cal-kv-value {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+.cal-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ---------------------------------------------------------------- anchor funnel */
+.cal-fn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cal-fn-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px 58px;
+  align-items: center;
+  column-gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--mantine-color-default-border);
+  font-size: 0.8rem;
+}
+.cal-fn-row:last-child {
+  border-bottom: none;
+}
+.cal-fn-step {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-fn-last {
+  font-weight: 650;
+}
+.cal-fn-removed {
+  text-align: right;
+  font-size: 0.72rem;
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- heads */
+.cal-heads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cal-head {
+  padding: 0 5px;
+  border-radius: 4px;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.68rem;
+  line-height: 18px;
+  color: var(--mantine-color-teal-light-color);
+  background: var(--mantine-color-teal-light);
+}
+.cal-head-best {
+  color: var(--mantine-color-white);
+  background: var(--mantine-color-teal-7);
+  font-weight: 700;
+}
+.cal-heads-spoiler .mantine-Spoiler-control {
+  font-size: 0.72rem;
+}
+
+/* ---------------------------------------------------------------- notes, feet */
+.cal-foot {
+  font-size: 0.72rem;
+  color: var(--mantine-color-dimmed);
+  margin-top: 2px;
+  min-height: 1em;
+}
+.cal-footer {
+  text-align: right;
+}
+.cal-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cal-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+.cal-note-icon {
+  color: var(--mantine-color-blue-6);
+  display: inline-flex;
+  padding-top: 1px;
+}
+
+/* ---------------------------------------------------------------- plot keys */
+/* The key of a plot: a line sample, a label and a value (detail.css's marker key). */
+.cal-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: -4px 0 6px;
+}
+.cal-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  white-space: nowrap;
+  cursor: help;
+}
+.cal-key-label {
+  font-weight: 600;
+}
+.cal-key-value {
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+.cal-sw {
+  display: inline-block;
+  position: relative;
+  width: 18px;
+  height: 11px;
+  flex-shrink: 0;
+}
+.cal-sw-dot::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cal-c);
+}
+.cal-sw-tri::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 8px solid var(--cal-c);
+}
+.cal-sw-line::after, .cal-sw-dash::after, .cal-sw-dashdot::after, .cal-sw-dotted::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 5px;
+  border-top: 2px solid var(--cal-c);
+}
+.cal-sw-dash::after {
+  border-top-style: dashed;
+}
+.cal-sw-dashdot::after {
+  border-top-style: dashed;
+  border-top-width: 1.5px;
+}
+.cal-sw-band {
+  background: rgba(134, 142, 150, 0.22);
+  border-top: 1px dashed var(--cal-c);
+  border-bottom: 1px dashed var(--cal-c);
+  box-sizing: border-box;
+}
+.cal-sw-dotted::after {
+  border-top-style: dotted;
+}
