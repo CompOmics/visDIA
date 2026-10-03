@@ -1,0 +1,11 @@
+{
+  "features": {"set": "extended"},
+  "rescore": {
+    "classifier": "entrapment",
+    "strict": false,
+    "entrapment_marker": "ENTRAP_",
+    "entrapment_exclude": "REAL_",
+    "entrapment_contaminant_markers": ["KRT", "K1C", "K2C", "ALBU", "TRYP"],
+    "entrapment_ratio": 0.560632
+  }
+}

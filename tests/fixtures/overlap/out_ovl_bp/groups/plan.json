@@ -1,0 +1,40 @@
+{
+  "bands": [
+    {
+      "est_precursors": 1378.1634844842665,
+      "index": 0,
+      "mz_hi": 1149.6234130859375,
+      "mz_lo": 250.32080078125,
+      "windows": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "est_precursors": 1378.1632974139245,
+      "index": 1,
+      "mz_hi": 2023.92578125,
+      "mz_lo": 1124.623291015625,
+      "windows": [
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "est_precursors": 931.5459508613085,
+      "index": 2,
+      "mz_hi": 2606.794189453125,
+      "mz_lo": 1998.926025390625,
+      "windows": [
+        6,
+        7
+      ]
+    }
+  ],
+  "calibration": "PerGroup",
+  "est_duplicated": 76.62382500454672,
+  "est_unselectable": 208.75109224504695,
+  "window_groups": 3
+}

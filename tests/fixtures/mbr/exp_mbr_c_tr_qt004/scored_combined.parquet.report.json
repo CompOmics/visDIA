@@ -1,0 +1,43 @@
+{
+  "logical_name": "psms_scored",
+  "schema_name": "psms_scored",
+  "schema_version": 4,
+  "stage": "rescore",
+  "rows": 565,
+  "content_hash": "7622ac51da0143fa88aebe208f107a921db7add3732b77a95429fa48264719e3",
+  "params": {
+    "classifier": "native_tda",
+    "classifier_requested": "NativeTda",
+    "competed_inputs": [
+      "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G3_mbr/exp_mbr_c_tr_qt004/a/psms_competed.parquet",
+      "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G3_mbr/exp_mbr_c_tr_qt004/c/psms_competed.parquet"
+    ],
+    "config_hash": "563af10ecdfe0967c9905a23df5e7102aea4f7ce174d8b603b8c4d1f8847bbc4",
+    "feature_preset": "all",
+    "feature_schema_id": "e5b4eff0133e411dbf406947c89466619ec557ab37874bc3948792d9890afe8e",
+    "feature_selection_id": "e5b4eff0133e411dbf406947c89466619ec557ab37874bc3948792d9890afe8e",
+    "features_used": null,
+    "folds": 3,
+    "n_features_available": 387,
+    "n_features_used": 387,
+    "num_iter": 10,
+    "seeds": 1,
+    "strict": true,
+    "train_fdr": 0.01,
+    "train_margin_frac": 0.5,
+    "train_neg_ratio": 2.0,
+    "train_neg_select": "hybrid",
+    "train_subsample": 0.0,
+    "train_warm_epochs": 5
+  },
+  "stats": {
+    "classifier": "native_tda",
+    "psms": 565,
+    "target_peptides_at_1pct": 117,
+    "target_precursors_at_1pct": 189,
+    "target_protein_groups_at_1pct": 0,
+    "target_psms_at_1pct": 563
+  },
+  "model_identity": "native-percolator-lite-v1",
+  "elapsed_ms": 313
+}

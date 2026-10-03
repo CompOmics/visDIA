@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mumdia-viewer"
+version = "0.1.0.dev0"
+description = "Interactive viewer for the outputs of the MuMDIA DIA search engine"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "CompOmics" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "pyarrow>=16",
+    "duckdb>=1.1",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "blake3>=0.4",
+    "dash>=3.0",
+    "dash-mantine-components>=2.0",
+    "dash-ag-grid>=32",
+    "plotly>=5.22",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pytest-timeout>=2.3"]
+dev = ["pytest>=8", "pytest-timeout>=2.3", "ruff>=0.6", "psutil>=5.9", "playwright>=1.45"]
+
+[project.scripts]
+mumdia-viewer = "mumdia_viewer.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mumdia_viewer"]
+artifacts = ["src/mumdia_viewer/ui/assets/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+extend-exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "real_data: needs real MuMDIA outputs named by MUMDIA_VIEWER_* environment variables (skipped otherwise)",
+    "engine: needs a MuMDIA binary named by MUMDIA_BIN (skipped otherwise)",
+]

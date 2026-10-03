@@ -1,0 +1,25 @@
+{
+  "logical_name": "chromatograms",
+  "schema_name": "chromatograms",
+  "schema_version": 2,
+  "stage": "extract",
+  "rows": 450,
+  "content_hash": "cc30bc48cf94b07044456a37a96b1e6bf233f095141dd1a56b58e9118f2ccd27",
+  "params": {
+    "effective_frag_tol_ppm": 20.0,
+    "frag_ppm_offset": 0.0,
+    "frag_tol_ppm": 20.0,
+    "gate_coelution_min": 0.5,
+    "gate_min_score": 0.2,
+    "gate_mode": "apex_pearson",
+    "presence_min_coelution": 2,
+    "presence_min_fragments": 3,
+    "scan_window": 3
+  },
+  "stats": {
+    "accepted": 50,
+    "scan_window": 3
+  },
+  "model_identity": null,
+  "elapsed_ms": 3
+}

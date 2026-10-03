@@ -1,0 +1,169 @@
+{
+  "artifacts": {
+    "lfq_maxlfq": {
+      "config_hash": "980e3e2347f3e2e322cca09f7e0b280799d997ecf8f200c5cd75cc97a3d4f5db",
+      "content_hash": "f207d9794e0951396efae04e4b6e7240818510299a63de0d0210af44f3c1a342",
+      "format": "parquet",
+      "logical_name": "lfq_maxlfq",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/lfq_maxlfq.parquet",
+      "producing_stage": "quant-lfq",
+      "rows": 32,
+      "schema_name": "lfq_maxlfq",
+      "schema_version": 1
+    },
+    "peptide_quant[a]": {
+      "config_hash": "980e3e2347f3e2e322cca09f7e0b280799d997ecf8f200c5cd75cc97a3d4f5db",
+      "content_hash": "fc5afc55bf6182ef649667926d2176df5fb7dc427767cf70c5b94d66397306aa",
+      "format": "parquet",
+      "logical_name": "peptide_quant[a]",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/a/peptide_quant.parquet",
+      "producing_stage": "quant",
+      "rows": 282,
+      "schema_name": "peptide_quant",
+      "schema_version": 2
+    },
+    "peptide_quant[b]": {
+      "config_hash": "980e3e2347f3e2e322cca09f7e0b280799d997ecf8f200c5cd75cc97a3d4f5db",
+      "content_hash": "fc5afc55bf6182ef649667926d2176df5fb7dc427767cf70c5b94d66397306aa",
+      "format": "parquet",
+      "logical_name": "peptide_quant[b]",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/b/peptide_quant.parquet",
+      "producing_stage": "quant",
+      "rows": 282,
+      "schema_name": "peptide_quant",
+      "schema_version": 2
+    },
+    "protein_group_quant[a]": {
+      "config_hash": "980e3e2347f3e2e322cca09f7e0b280799d997ecf8f200c5cd75cc97a3d4f5db",
+      "content_hash": "d732a10d8af37964d6dcb2f61d88ac722918ce3acfb84e0933a351d6c35e31cc",
+      "format": "parquet",
+      "logical_name": "protein_group_quant[a]",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/a/protein_group_quant.parquet",
+      "producing_stage": "quant",
+      "rows": 16,
+      "schema_name": "protein_group_quant",
+      "schema_version": 2
+    },
+    "protein_group_quant[b]": {
+      "config_hash": "980e3e2347f3e2e322cca09f7e0b280799d997ecf8f200c5cd75cc97a3d4f5db",
+      "content_hash": "d732a10d8af37964d6dcb2f61d88ac722918ce3acfb84e0933a351d6c35e31cc",
+      "format": "parquet",
+      "logical_name": "protein_group_quant[b]",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/b/protein_group_quant.parquet",
+      "producing_stage": "quant",
+      "rows": 16,
+      "schema_name": "protein_group_quant",
+      "schema_version": 2
+    },
+    "scored[a]": {
+      "config_hash": "980e3e2347f3e2e322cca09f7e0b280799d997ecf8f200c5cd75cc97a3d4f5db",
+      "content_hash": "a43dcb836a406e5a6aab4a4ad8d7146146e69a3bbb4a0e580e99bd98e2d880c8",
+      "format": "parquet",
+      "logical_name": "scored[a]",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/a/scored.parquet",
+      "producing_stage": "split-by-source",
+      "rows": 284,
+      "schema_name": "psms_scored",
+      "schema_version": 4
+    },
+    "scored[b]": {
+      "config_hash": "980e3e2347f3e2e322cca09f7e0b280799d997ecf8f200c5cd75cc97a3d4f5db",
+      "content_hash": "253eb1124a9ec69ef946f87b5733f79e60914bdbc3099dbea0ea0c33ee21a544",
+      "format": "parquet",
+      "logical_name": "scored[b]",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/b/scored.parquet",
+      "producing_stage": "split-by-source",
+      "rows": 284,
+      "schema_name": "psms_scored",
+      "schema_version": 4
+    },
+    "scored_combined": {
+      "config_hash": "980e3e2347f3e2e322cca09f7e0b280799d997ecf8f200c5cd75cc97a3d4f5db",
+      "content_hash": "60cbea1148af35885baa1b78ca84050587b2d9cf35e7924dd8b4ade2c43ca028",
+      "format": "parquet",
+      "logical_name": "scored_combined",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/scored_combined.parquet",
+      "producing_stage": "rescore",
+      "rows": 568,
+      "schema_name": "psms_scored",
+      "schema_version": 4
+    }
+  },
+  "cli_args": [
+    "C:\\Program Files\\MuMDIA\\binaries\\mumdia.exe",
+    "run-experiment",
+    "--fasta",
+    "test_data/fixture.fasta",
+    "--mzml",
+    "C:/Users/robbi/mumdia_viewer_ref/smoke/fixture.mzML",
+    "--mzml",
+    "C:/Users/robbi/mumdia_viewer_ref/smoke/fixture_b.mzML",
+    "--run-names",
+    "a",
+    "--run-names",
+    "b",
+    "--out-dir",
+    "C:/Users/robbi/mumdia_viewer_ref/smoke/exp",
+    "--config",
+    "C:/Users/robbi/mumdia_viewer_ref/smoke/exp_seq.json"
+  ],
+  "commit_date": "2026-09-29T12:37:28+02:00",
+  "config_hash": "980e3e2347f3e2e322cca09f7e0b280799d997ecf8f200c5cd75cc97a3d4f5db",
+  "config_json": "{\"convert\":{\"thermo_raw_parser\":\"auto\",\"msconvert\":\"auto\",\"msconvert_args\":[],\"reuse_converted\":true,\"parallel_conversions\":4},\"prescan\":{\"tol_da\":0.005,\"rt_slack_s\":150.0,\"rt_bin_s\":25.0,\"top_peaks\":150,\"mods\":[\"C:Carbamidomethyl\",\"M:Oxidation\"],\"anchor_mods\":[],\"anchor_all\":false},\"rng_seed\":0,\"digest\":{\"enzyme\":\"trypsin_p\",\"missed_cleavages\":2,\"min_len\":5,\"max_len\":50,\"decoy\":{\"strategy\":\"reverse\"},\"n_term_met_excision\":true},\"peptidoforms\":{\"fixed_mods\":[{\"residue\":\"C\",\"name\":\"Carbamidomethyl\"}],\"variable_mods\":[{\"residue\":\"M\",\"name\":\"Oxidation\"}],\"max_variable_mods\":1,\"charge_min\":2,\"charge_max\":3,\"charge_by_basic_residues\":false,\"unknown_modification\":\"error\"},\"predict_frag\":{\"predictor\":\"native\",\"rt_predictor\":\"native\",\"charge2_from_precursor_charge\":2,\"charge_by_basic_residues\":false,\"top_n_fragments\":6,\"ms2pip_model\":\"HCDch2\",\"ms2pip_python\":null,\"peptdeep_model\":\"generic\",\"peptdeep_nce\":30.0,\"peptdeep_instrument\":\"Lumos\",\"peptdeep_python\":null,\"deeplc_python\":null,\"sidecar_script_dir\":\"C:\\\\Program Files\\\\MuMDIA\\\\binaries\\\\scripts\",\"defer_deeplc_to_multihead\":true,\"library_cache\":\"auto\"},\"search_seed\":{\"fdr_seed\":0.01,\"fragment_tol_ppm\":20.0,\"report_psms\":5,\"min_matched_peaks\":4,\"top_n_peaks\":300,\"matcher\":\"fragindex\",\"two_pass_mass_cal\":false,\"mass_cal_loess\":false},\"rt_im_train\":{\"calibration_method\":\"loess\",\"q_train\":0.01,\"p_rt\":0.95,\"rt_window_multiplier\":1.0,\"min_seed_for_calibration\":50,\"loess_span\":0.3,\"fallback_rt_window_s\":120.0,\"finetune_deeplc\":false,\"multihead_calibration\":null,\"finetune_epochs\":25,\"finetune_patience\":10,\"finetune_batch\":0,\"adaptive_rt_window\":false,\"adaptive_rt_bins\":12,\"rt_window_min_s\":1.0,\"window_holdout_frac\":0.0,\"library_irt\":\"auto\",\"deeplc_predict_shards\":0,\"deeplc_projection_cache\":\"auto\"},\"extract\":{\"windows_in_flight\":null,\"fixed_scan_window\":3,\"frag_tol_ppm\":20.0,\"prec_tol_ppm\":20.0,\"presence_min_matched\":3,\"presence_min_fragments\":3,\"presence_min_coelution\":2,\"gate_min_score\":0.2,\"min_matched_fraction\":0.0,\"apex_top_fragments\":0,\"apex_rt_prior_s\":120.0,\"apex_count_tol\":1,\"apex_count_window\":5,\"apex_gaussian_sigma_scans\":0.0,\"emit_window_grid\":true,\"chromatogram_schema\":2,\"bucket_size\":8192,\"peak_claim\":\"none\",\"claim_cues\":{\"mz_close\":false,\"mz_close_sigma_ppm\":5.0,\"rt_prior\":false,\"rt_prior_tau_s\":30.0,\"ms1_support\":false,\"reassign\":false,\"apportion_em_iters\":0},\"emit_demix_features\":false,\"demix_lambda\":1.0,\"demix_max_candidates\":64,\"demix_scan_stride\":1,\"emit_contested_features\":false,\"peak_claim_margin\":2.0,\"matcher\":\"fragindex\",\"min_coelution_run\":0,\"ms1_rescue\":false,\"retain_top_peaks\":1,\"promote_top_peaks\":1,\"alt_peak_min_area_frac\":0.1,\"alt_peak_min_separation_s\":5.0,\"emit_candidate_audit\":false,\"apex_evidence_rank\":true,\"emit_gate_diagnostics\":false,\"gate_mode\":\"apex_pearson\",\"gate_coelution_min\":0.5},\"features\":{\"set\":\"extended\",\"emit_pin\":false,\"coelution_corr_threshold\":0.9,\"prec_tol_ppm\":20.0,\"bound_features\":true,\"bound_peak_fraction\":0.3333333333333333,\"bound_peak_grace\":0,\"bound_from_confident\":true,\"bound_confident_pct\":50.0,\"ms1_precursor_features\":false,\"chrom_loaders\":3},\"compete\":{\"group_by\":\"peptidoform_charge\",\"apex_rt_tolerance_s\":5.0,\"mode\":\"winner_take_all\",\"margin\":0.0,\"unique_evidence_min_fragments\":2,\"emit_competition_audit\":false},\"rescore\":{\"classifier\":\"native_tda\",\"folds\":3,\"train_fdr\":0.01,\"num_iter\":10,\"max_feature_matrix_gib\":0.0,\"python\":null,\"percolator_bin\":null,\"entrapment_marker\":null,\"entrapment_exclude\":null,\"entrapment_contaminant_markers\":[],\"entrapment_ratio\":1.0,\"strict\":true,\"handoff\":\"raw\",\"features\":null,\"features_file\":null,\"feature_preset\":\"all\",\"train_neg_ratio\":2.0,\"train_neg_select\":\"hybrid\",\"train_subsample\":0.0,\"train_warm_epochs\":5,\"train_margin_frac\":0.5,\"seeds\":1},\"quant\":{\"q_threshold\":0.01,\"top_n_fragments\":3,\"top_n_peptides\":3,\"rollup\":\"top_n_sum\",\"bound_peak\":true,\"peak_fraction\":0.16666666666666666,\"peak_grace\":1,\"peak_window_mode\":\"per_candidate\",\"reliable_q\":0.001,\"q_filter\":\"peptide_q\",\"interference_envelope\":false,\"fragment_selection\":\"observed_area\",\"fixed_scan_halfwidth\":0,\"baseline_subtract\":false,\"baseline_flank_scans\":12,\"baseline_quantile\":0.25,\"fixed_window_s\":0.0},\"mbr\":{\"strategy\":\"none\",\"q_anchor\":0.01,\"min_anchor_runs\":2,\"q_transfer\":0.01,\"rt_window_s\":20.0,\"decoy_transfer\":\"permuted_rt\",\"consensus_corr_min\":0.0,\"requant_all\":false,\"python\":null},\"experiment\":{\"parallel_runs\":1,\"rt_library_scope\":\"first_run_only\",\"overlap_front_threads\":0},\"groups\":{\"window_groups\":1,\"calibration\":\"global\",\"parallel\":1,\"rt_adaptation\":\"once_per_run\",\"balance\":\"precursors\",\"delete_band_intermediates\":true,\"pool_competed\":false,\"pool_chromatograms\":false}}",
+  "experiment": {
+    "config_hash": "980e3e2347f3e2e322cca09f7e0b280799d997ecf8f200c5cd75cc97a3d4f5db",
+    "lfq": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/lfq_maxlfq.parquet",
+    "mbr": "None",
+    "n_runs": 2,
+    "peptide_quants": [
+      "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/a/peptide_quant.parquet",
+      "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/b/peptide_quant.parquet"
+    ],
+    "quant_q_filter": {
+      "configured": "PeptideQ",
+      "effective": "PsmQ"
+    },
+    "report": {
+      "n_precursors": 150,
+      "n_protein_groups": 0,
+      "peptides": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/peptides.tsv",
+      "proteins": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/proteins.tsv",
+      "q_threshold": 0.01,
+      "unit": "experiment-wide peptide_q_value / pg_q_value; n_runs on run_psm_q"
+    },
+    "rescorer": "native_tda",
+    "runs": [
+      "a",
+      "b"
+    ],
+    "scored_combined": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/scored_combined.parquet",
+    "scored_for_quant": "C:/Users/robbi/mumdia_viewer_ref/smoke/exp/scored_combined.parquet"
+  },
+  "git_sha": "80d4874318cb",
+  "inputs": {
+    "fasta": {
+      "bytes": 2723,
+      "content_hash": "6270c25f2dac0e224f63de65df37ea604cb0419c7f229e6a822551e24ba33a38",
+      "path": "test_data/fixture.fasta"
+    },
+    "mzml[0]": {
+      "bytes": 1761106,
+      "content_hash": "f5187d0c1d35be705377d9db90ce0fae5d22ae062c02d42cd1a63dd291907cf9",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/fixture.mzML"
+    },
+    "mzml[1]": {
+      "bytes": 1761106,
+      "content_hash": "f5187d0c1d35be705377d9db90ce0fae5d22ae062c02d42cd1a63dd291907cf9",
+      "path": "C:/Users/robbi/mumdia_viewer_ref/smoke/fixture_b.mzML"
+    }
+  },
+  "inputs_hashed_at": "start",
+  "model_identities": {
+    "feature_schema_id": "e5b4eff0133e411dbf406947c89466619ec557ab37874bc3948792d9890afe8e",
+    "fragment_predictor": "Native",
+    "mbr": "None",
+    "rescorer": "native-percolator-lite-v1",
+    "rt_predictor": "Native"
+  },
+  "mumdia_version": "0.5.0"
+}

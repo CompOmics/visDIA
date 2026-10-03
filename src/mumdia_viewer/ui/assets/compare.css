@@ -1,0 +1,534 @@
+/* mumdia-viewer: the compare page (cmp-*). Colours come from Mantine variables, so the
+   page follows the light and the dark theme. A is blue, B is ochre (checked for
+   colour-vision deficiency), shared is the neutral grey between them. */
+
+:root {
+  --cmp-a: #1c7ed6;
+  --cmp-b: #c96a00;
+  --cmp-both: var(--mantine-color-gray-4);
+  --cmp-both-fg: var(--mantine-color-gray-8);
+  --cmp-grid-bg: var(--mantine-color-white);
+  --cmp-grid-fg: var(--mantine-color-text);
+  --cmp-grid-dim: var(--mantine-color-dimmed);
+  --cmp-grid-header: var(--mantine-color-gray-0);
+  --cmp-grid-header-fg: var(--mantine-color-gray-7);
+  --cmp-grid-chrome: var(--mantine-color-gray-0);
+  --cmp-grid-border: var(--mantine-color-gray-3);
+  --cmp-grid-rowline: var(--mantine-color-gray-1);
+  --cmp-grid-hover: rgba(66, 99, 235, 0.06);
+  --cmp-grid-accent: var(--mantine-color-indigo-6);
+  --cmp-tip-bg: var(--mantine-color-gray-9);
+  --cmp-tip-fg: var(--mantine-color-white);
+  --cmp-bar-score: var(--mantine-color-grape-5);
+  --cmp-row-active: rgba(66, 99, 235, 0.07);
+  --cmp-row-hover: rgba(66, 99, 235, 0.04);
+}
+[data-mantine-color-scheme="dark"] {
+  --cmp-a: #339af0;
+  --cmp-b: #c96a00;
+  --cmp-both: var(--mantine-color-dark-3);
+  --cmp-both-fg: var(--mantine-color-dark-0);
+  --cmp-grid-bg: var(--mantine-color-dark-6);
+  --cmp-grid-fg: var(--mantine-color-dark-0);
+  --cmp-grid-dim: var(--mantine-color-dark-2);
+  --cmp-grid-header: var(--mantine-color-dark-7);
+  --cmp-grid-header-fg: var(--mantine-color-dark-1);
+  --cmp-grid-chrome: var(--mantine-color-dark-7);
+  --cmp-grid-border: var(--mantine-color-dark-4);
+  --cmp-grid-rowline: var(--mantine-color-dark-5);
+  --cmp-grid-hover: rgba(116, 143, 252, 0.09);
+  --cmp-grid-accent: var(--mantine-color-indigo-4);
+  --cmp-tip-bg: var(--mantine-color-gray-2);
+  --cmp-tip-fg: var(--mantine-color-black);
+  --cmp-bar-score: var(--mantine-color-grape-4);
+  --cmp-row-active: rgba(116, 143, 252, 0.12);
+  --cmp-row-hover: rgba(116, 143, 252, 0.06);
+}
+
+/* ---------------------------------------------------------------- side marks */
+.cmp-side {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 6px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+}
+.cmp-side-a {
+  background: var(--cmp-a);
+}
+.cmp-side-b {
+  background: var(--cmp-b);
+}
+.cmp-side-sm {
+  width: 17px;
+  height: 17px;
+  font-size: 0.66rem;
+  border-radius: 4px;
+}
+.cmp-side-md {
+  width: 22px;
+  height: 22px;
+  font-size: 0.78rem;
+}
+.cmp-side-lg {
+  width: 30px;
+  height: 30px;
+  font-size: 1rem;
+  border-radius: 8px;
+}
+
+/* ---------------------------------------------------------------- hero */
+.cmp-hero > :first-child {
+  min-width: 0;
+}
+.cmp-names {
+  margin-top: 2px;
+  row-gap: 4px;
+}
+.cmp-name {
+  font-size: 1.45rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 420px;
+}
+.cmp-vs {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.cmp-paths {
+  margin-top: 4px;
+  color: var(--mantine-color-dimmed);
+}
+.cmp-path-side {
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- text */
+.cmp-note {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--mantine-color-dimmed);
+  margin-top: 4px;
+}
+.cmp-note:empty {
+  display: none;
+}
+.cmp-dim {
+  color: var(--mantine-color-dimmed);
+  font-style: italic;
+}
+.cmp-mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.76rem;
+}
+.cmp-help-text {
+  cursor: help;
+  border-bottom: 1px dotted var(--mantine-color-default-border);
+}
+.cmp-derived {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-weight: 650;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--mantine-color-grape-light-color);
+  background: var(--mantine-color-grape-light);
+  cursor: help;
+}
+.cmp-footer {
+  margin-top: -4px;
+}
+.cmp-title-name {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 650;
+  color: var(--mantine-color-text);
+}
+
+/* ---------------------------------------------------------------- provenance */
+.cmp-prov-box {
+  overflow-x: auto;
+}
+.cmp-prov {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.cmp-prov th {
+  text-align: left;
+  font-weight: 650;
+  font-size: 0.78rem;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+.cmp-prov td {
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid var(--cmp-grid-rowline);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.cmp-prov td:first-child {
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+  width: 1%;
+  padding-right: 14px;
+}
+.cmp-prov td.mv-num {
+  text-align: right;
+  white-space: nowrap;
+}
+.cmp-prov .cmp-group {
+  padding-top: 10px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  border-bottom: none;
+}
+.cmp-prov tr.cmp-row-diff td:not(:first-child):not(.cmp-mark-col) {
+  font-weight: 600;
+}
+.cmp-mark-col {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+.cmp-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+.cmp-mark-same {
+  color: var(--mantine-color-green-7);
+  background: var(--mantine-color-green-light);
+}
+.cmp-mark-diff {
+  color: var(--mantine-color-yellow-8);
+  background: var(--mantine-color-yellow-light);
+}
+.cmp-delta {
+  white-space: nowrap;
+  font-weight: 650;
+  cursor: help;
+}
+.cmp-delta-up {
+  color: var(--mantine-color-teal-7);
+}
+.cmp-delta-down {
+  color: var(--mantine-color-red-7);
+}
+[data-mantine-color-scheme="dark"] .cmp-delta-up {
+  color: var(--mantine-color-teal-4);
+}
+[data-mantine-color-scheme="dark"] .cmp-delta-down {
+  color: var(--mantine-color-red-4);
+}
+
+/* ---------------------------------------------------------------- configuration */
+.cmp-cfg-box {
+  max-height: 392px;
+  overflow: auto;
+}
+.cmp-cfg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+  table-layout: fixed;
+}
+.cmp-cfg-table th {
+  text-align: left;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  position: sticky;
+  top: 0;
+  background: var(--mantine-color-body);
+}
+.cmp-cfg-table th:first-child {
+  width: 38%;
+}
+.cmp-cfg-table td {
+  padding: 5px 8px 5px 0;
+  border-bottom: 1px solid var(--cmp-grid-rowline);
+  vertical-align: top;
+}
+.cmp-key {
+  font-family: var(--mantine-font-family-monospace);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.cmp-cfg {
+  font-family: var(--mantine-font-family-monospace);
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------- overlap */
+.cmp-ov {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cmp-ov-row {
+  display: grid;
+  grid-template-columns: 150px 84px minmax(0, 1fr) 84px 76px;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: var(--mantine-radius-md);
+  cursor: pointer;
+}
+.cmp-ov-row:hover {
+  background: var(--cmp-row-hover);
+}
+.cmp-ov-row-active,
+.cmp-ov-row-active:hover {
+  background: var(--cmp-row-active);
+  box-shadow: inset 3px 0 0 var(--mantine-color-indigo-6);
+}
+.cmp-ov-header {
+  cursor: default;
+  padding-top: 0;
+  padding-bottom: 2px;
+}
+.cmp-ov-header:hover {
+  background: none;
+}
+.cmp-ov-head {
+  white-space: nowrap;
+  font-size: 0.7rem;
+  font-weight: 650;
+  color: var(--mantine-color-dimmed);
+}
+.cmp-ov-unit {
+  font-weight: 650;
+  font-size: 0.9rem;
+}
+.cmp-ov-q {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.7rem;
+  color: var(--mantine-color-dimmed);
+  cursor: help;
+  width: fit-content;
+}
+.cmp-ov-n {
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.cmp-ov-na {
+  color: var(--cmp-a);
+}
+.cmp-ov-nb {
+  color: var(--cmp-b);
+  text-align: left;
+}
+.cmp-ov-header .cmp-ov-n:last-of-type {
+  text-align: left;
+}
+.cmp-ov-j {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  text-align: right;
+  color: var(--mantine-color-dimmed);
+}
+.cmp-ov-legend {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: var(--mantine-color-dimmed);
+}
+.cmp-bar-cell {
+  min-width: 0;
+}
+.cmp-bar {
+  display: flex;
+  gap: 2px;
+  height: 18px;
+  min-width: 0;
+}
+.cmp-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 3px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+.cmp-bar-labels b {
+  font-weight: 700;
+}
+.cmp-lab-a b {
+  color: var(--cmp-a);
+}
+.cmp-lab-b b {
+  color: var(--cmp-b);
+}
+.cmp-lab-both b {
+  color: var(--mantine-color-text);
+}
+.cmp-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3px;
+  overflow: hidden;
+  border-radius: 4px;
+}
+.cmp-seg-a {
+  background: var(--cmp-a);
+  color: #fff;
+}
+.cmp-seg-b {
+  background: var(--cmp-b);
+  color: #fff;
+}
+.cmp-seg-both {
+  background: var(--cmp-both);
+  color: var(--cmp-both-fg);
+}
+.cmp-seg-none {
+  background: var(--mantine-color-default-border);
+}
+.cmp-seg-text {
+  font-size: 0.74rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding: 0 6px;
+}
+.cmp-key-sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
+/* ---------------------------------------------------------------- unit bar */
+.cmp-unitbar {
+  border-radius: var(--mantine-radius-lg);
+}
+.cmp-unit-summary {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-dimmed);
+}
+
+/* ---------------------------------------------------------------- pick */
+.cmp-pick {
+  padding: 8px 14px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-lg);
+  background: var(--mantine-color-body);
+}
+#cmp-pick:empty {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- tables */
+.cmp-gridbox {
+  height: 420px;
+  margin: 8px calc(-1 * var(--mantine-spacing-md)) 0;
+  border-top: 1px solid var(--cmp-grid-border);
+}
+.cmp-grid .ag-cell {
+  display: flex;
+  align-items: center;
+}
+.cmp-grid .ag-right-aligned-cell {
+  justify-content: flex-end;
+}
+.cmp-link {
+  display: block;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmp-link:hover {
+  color: var(--mantine-color-indigo-6);
+  text-decoration: underline;
+}
+.cmp-link-b:hover {
+  color: var(--cmp-b);
+}
+.cmp-cell-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmp-none {
+  color: var(--mantine-color-dimmed);
+  font-style: italic;
+  font-size: 0.82em;
+}
+.cmp-other-q {
+  color: var(--mantine-color-dimmed);
+}
+
+/* ---------------------------------------------------------------- without B */
+.cmp-command-box {
+  position: relative;
+}
+.cmp-command {
+  font-size: 0.8rem;
+  padding-right: 44px !important;
+  white-space: pre-wrap;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+.cmp-copy {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+@media (max-width: 1250px) {
+  .cmp-ov-row {
+    grid-template-columns: 118px 70px minmax(0, 1fr) 70px 56px;
+    gap: 8px;
+  }
+  .cmp-name {
+    max-width: 300px;
+  }
+}
+
+.cmp-grid .ag-cell-value,
+.cmp-grid .ag-cell > span,
+.cmp-grid .ag-cell > div {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.cmp-sections {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--cmp-grid-rowline);
+}

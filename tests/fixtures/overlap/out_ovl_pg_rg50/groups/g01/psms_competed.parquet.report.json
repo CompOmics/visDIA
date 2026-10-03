@@ -1,0 +1,20 @@
+{
+  "logical_name": "psms_competed",
+  "schema_name": "psms_competed",
+  "schema_version": 4,
+  "stage": "compete",
+  "rows": 119,
+  "content_hash": "b2b82b017ed7ec02e6c05e07cf66ae5fc2ee5feeebf630cb20a2301d6c23491a",
+  "params": {
+    "group_by": "PeptidoformCharge",
+    "mode": "WinnerTakeAll"
+  },
+  "stats": {
+    "input_rows": 119,
+    "kept": 119,
+    "publish": "hard_link",
+    "removed": 0
+  },
+  "model_identity": null,
+  "elapsed_ms": 4
+}

@@ -1,0 +1,288 @@
+/* mumdia-viewer: the run QC page (qc-*). Colours come from Mantine variables, so the
+   page follows the light and the dark theme. */
+
+:root {
+  --qc-grid-bg: var(--mantine-color-white);
+  --qc-grid-fg: var(--mantine-color-text);
+  --qc-grid-dim: var(--mantine-color-dimmed);
+  --qc-grid-header: var(--mantine-color-gray-0);
+  --qc-grid-header-fg: var(--mantine-color-gray-7);
+  --qc-grid-chrome: var(--mantine-color-gray-0);
+  --qc-grid-border: var(--mantine-color-gray-3);
+  --qc-grid-rowline: var(--mantine-color-gray-1);
+  --qc-grid-hover: rgba(66, 99, 235, 0.05);
+  --qc-grid-selected: rgba(66, 99, 235, 0.13);
+  --qc-grid-accent: var(--mantine-color-indigo-6);
+  --qc-tip-bg: var(--mantine-color-gray-9);
+  --qc-tip-fg: var(--mantine-color-white);
+  --qc-bar-score: var(--mantine-color-grape-5);
+}
+[data-mantine-color-scheme="dark"] {
+  --qc-grid-bg: var(--mantine-color-dark-6);
+  --qc-grid-fg: var(--mantine-color-dark-0);
+  --qc-grid-dim: var(--mantine-color-dark-2);
+  --qc-grid-header: var(--mantine-color-dark-7);
+  --qc-grid-header-fg: var(--mantine-color-dark-1);
+  --qc-grid-chrome: var(--mantine-color-dark-7);
+  --qc-grid-border: var(--mantine-color-dark-4);
+  --qc-grid-rowline: var(--mantine-color-dark-5);
+  --qc-grid-hover: rgba(116, 143, 252, 0.08);
+  --qc-grid-selected: rgba(116, 143, 252, 0.22);
+  --qc-grid-accent: var(--mantine-color-indigo-4);
+  --qc-tip-bg: var(--mantine-color-gray-2);
+  --qc-tip-fg: var(--mantine-color-black);
+  --qc-bar-score: var(--mantine-color-grape-4);
+}
+
+/* ---------------------------------------------------------------- header */
+.qc-hero > :first-child {
+  min-width: 0;
+}
+.qc-mzml {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.74rem;
+  color: var(--mantine-color-dimmed);
+  word-break: break-all;
+}
+.qc-facts {
+  flex-shrink: 0;
+}
+.qc-fact {
+  min-width: 112px;
+  padding: 8px 14px;
+  border-radius: var(--mantine-radius-md);
+}
+.qc-fact-label {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+.qc-fact-value {
+  font-size: 1.12rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.qc-fact-sub {
+  font-size: 0.68rem;
+  color: var(--mantine-color-dimmed);
+  font-family: var(--mantine-font-family-monospace);
+  white-space: nowrap;
+}
+.qc-derived {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-family: var(--mantine-font-family);
+  font-size: 0.62rem;
+  font-weight: 650;
+  line-height: 1.5;
+  color: var(--mantine-color-grape-light-color);
+  background: var(--mantine-color-grape-light);
+  cursor: help;
+}
+.qc-runs {
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------- notes */
+.qc-note {
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--mantine-color-dimmed);
+  margin-top: 4px;
+}
+.qc-note:empty {
+  display: none;
+}
+.qc-dim {
+  color: var(--mantine-color-dimmed);
+}
+.qc-mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.78rem;
+}
+.qc-warn {
+  color: var(--mantine-color-red-6);
+}
+
+/* ---------------------------------------------------------------- scan */
+.qc-kvs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 6px 14px;
+  margin-top: 6px;
+}
+.qc-kv {
+  min-width: 0;
+}
+.qc-kv-label {
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+.qc-kv-value {
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- RT-bin list */
+.qc-gridbox {
+  height: 300px;
+  margin: 0 calc(-1 * var(--mantine-spacing-md));
+  border-top: 1px solid var(--qc-grid-border);
+}
+.qc-grid .ag-cell {
+  display: flex;
+  align-items: center;
+}
+.qc-grid .ag-right-aligned-cell {
+  justify-content: flex-end;
+}
+.qc-grid .qc-cell-valid {
+  justify-content: center;
+  padding: 0;
+}
+.qc-pep-link {
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qc-pep-link:hover {
+  color: var(--mantine-color-indigo-6);
+  text-decoration: underline;
+}
+[data-mantine-color-scheme="dark"] .qc-pep-link:hover {
+  color: var(--mantine-color-indigo-3);
+}
+/* ---------------------------------------------------------------- peaks */
+.qc-minis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.qc-mini {
+  padding: 5px 8px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  min-width: 0;
+  cursor: help;
+}
+.qc-mini-label {
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qc-mini-value {
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.qc-pending {
+  min-height: 240px;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------- modification table */
+.qc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.qc-table th {
+  text-align: left;
+  font-weight: 650;
+  font-size: 0.72rem;
+  color: var(--mantine-color-dimmed);
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  white-space: nowrap;
+}
+.qc-table td {
+  padding: 6px 6px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  vertical-align: middle;
+}
+.qc-table tr:last-child td {
+  border-bottom: none;
+}
+.qc-table .qc-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.qc-mod {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.qc-mod-tag {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.6;
+  color: #fff;
+}
+.qc-mod-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.qc-bar-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.qc-bar {
+  width: 36px;
+  height: 7px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--mantine-color-default-border);
+  flex-shrink: 0;
+}
+.qc-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+}
+.qc-bar-text {
+  font-variant-numeric: tabular-nums;
+  min-width: 46px;
+  text-align: right;
+}
+
+/* ---------------------------------------------------------------- footer */
+.qc-footer {
+  color: var(--mantine-color-dimmed);
+}
+
+/* ---------------------------------------------------------------- card titles with a count */
+.qc-title-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.qc-title-badge {
+  letter-spacing: 0;
+}

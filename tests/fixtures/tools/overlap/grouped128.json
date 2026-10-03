@@ -1,0 +1,5 @@
+{
+  "features": { "set": "extended" },
+  "extract": { "apex_count_window": 5, "apex_rt_prior_s": 120.0, "gate_min_score": 0.2 },
+  "groups": { "window_groups": 128, "parallel": 2, "calibration": "per_group" }
+}

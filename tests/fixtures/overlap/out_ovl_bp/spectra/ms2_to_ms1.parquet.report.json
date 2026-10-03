@@ -1,0 +1,18 @@
+{
+  "logical_name": "ms2_to_ms1",
+  "schema_name": "ms2_to_ms1",
+  "schema_version": 1,
+  "stage": "convert",
+  "rows": 480,
+  "content_hash": "7d76d28bf50852ac6a58a81ad7077bfe3eddb22ae5c4acc397b2c7e46d701012",
+  "params": {
+    "config_hash": "d239d92f1a6733c8706a280f0bd4a9a86be3d0c0841c535beefe56cad559925e",
+    "max_spectra": 0,
+    "mzml": "C:/Users/robbi/AppData/Local/Temp/claude/C--Users-robbi-OneDrive-Documents-GitHub-visDIA/ecfc3918-c866-4e97-9df8-df3b2807a87f/scratchpad/tmp/G4_losers/fixture_ovl.mzML",
+    "top_peaks_ms1": 0,
+    "top_peaks_ms2": 0
+  },
+  "stats": {},
+  "model_identity": null,
+  "elapsed_ms": 10
+}

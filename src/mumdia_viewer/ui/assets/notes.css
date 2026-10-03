@@ -1,0 +1,43 @@
+/* mumdia-viewer: the notes page (ui/notes.py). */
+
+.nt-grid .nt-accepted {
+  color: var(--mantine-color-green-light-color);
+  font-weight: 700;
+}
+.nt-grid .nt-rejected {
+  color: var(--mantine-color-red-light-color);
+  font-weight: 700;
+}
+.nt-grid .nt-unsure {
+  color: var(--mantine-color-yellow-light-color);
+  font-weight: 700;
+}
+.nt-grid .ag-row {
+  cursor: pointer;
+}
+
+/* The verdict column of the precursor grids (MvNote). */
+.mv-note {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  vertical-align: middle;
+}
+.mv-note-accepted {
+  background: var(--mantine-color-green-filled);
+  color: #fff;
+}
+.mv-note-rejected {
+  background: var(--mantine-color-red-filled);
+  color: #fff;
+}
+.mv-note-unsure {
+  background: var(--mantine-color-yellow-filled);
+  color: #fff;
+}

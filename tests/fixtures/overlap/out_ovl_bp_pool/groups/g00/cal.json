@@ -1,0 +1,19 @@
+{
+  "calibration_status": "loess",
+  "holdout_resid_abs_median_s": null,
+  "holdout_resid_p_rt_s": null,
+  "intercept": 22.39972961004393,
+  "method": "loess",
+  "multiplier": 1.0,
+  "n_holdout": null,
+  "n_sizing_train": null,
+  "n_train": 51,
+  "p_rt": 0.95,
+  "rt_residual_abs_median_s": 1.3951402168870217,
+  "rt_residual_mad_s": 1.4640924158016446,
+  "rt_residual_median_s": 0.0689521989146229,
+  "slope": 0.9380164494282974,
+  "w_rt": 4.967525939063243,
+  "w_rt_sizing": "in_sample",
+  "window_holdout_frac": 0.0
+}

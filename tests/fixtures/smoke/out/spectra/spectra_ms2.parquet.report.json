@@ -1,0 +1,18 @@
+{
+  "logical_name": "spectra_ms2",
+  "schema_name": "spectra_ms2",
+  "schema_version": 1,
+  "stage": "convert",
+  "rows": 480,
+  "content_hash": "b7b6109f7fda9d299ad4651cf0d6b7a0d779248e893da6922b16aa20a927efe1",
+  "params": {
+    "config_hash": "da07b330ca76d62b0ae9b1d48a59e859b7ee31c5c9cfa42bb85529fbd5552bdf",
+    "max_spectra": 0,
+    "mzml": "C:/Users/robbi/mumdia_viewer_ref/smoke/fixture.mzML",
+    "top_peaks_ms1": 0,
+    "top_peaks_ms2": 0
+  },
+  "stats": {},
+  "model_identity": null,
+  "elapsed_ms": 68
+}
