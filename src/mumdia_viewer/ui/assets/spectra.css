@@ -1,0 +1,377 @@
+/* mumdia-viewer: the spectrum browser (sp-*). Colours come from Mantine variables, so the
+   page follows the light and the dark theme. */
+
+:root {
+  --sp-grid-bg: var(--mantine-color-white);
+  --sp-grid-fg: var(--mantine-color-text);
+  --sp-grid-dim: var(--mantine-color-dimmed);
+  --sp-grid-header: var(--mantine-color-gray-0);
+  --sp-grid-header-fg: var(--mantine-color-gray-7);
+  --sp-grid-chrome: var(--mantine-color-gray-0);
+  --sp-grid-border: var(--mantine-color-gray-3);
+  --sp-grid-rowline: var(--mantine-color-gray-1);
+  --sp-grid-hover: rgba(66, 99, 235, 0.05);
+  --sp-grid-selected: rgba(66, 99, 235, 0.13);
+  --sp-grid-accent: var(--mantine-color-indigo-6);
+  --sp-tip-bg: var(--mantine-color-gray-9);
+  --sp-tip-fg: var(--mantine-color-white);
+  --sp-bar-score: var(--mantine-color-grape-5);
+  --sp-bar-match: var(--mantine-color-teal-6);
+}
+[data-mantine-color-scheme="dark"] {
+  --sp-grid-bg: var(--mantine-color-dark-6);
+  --sp-grid-fg: var(--mantine-color-dark-0);
+  --sp-grid-dim: var(--mantine-color-dark-2);
+  --sp-grid-header: var(--mantine-color-dark-7);
+  --sp-grid-header-fg: var(--mantine-color-dark-1);
+  --sp-grid-chrome: var(--mantine-color-dark-7);
+  --sp-grid-border: var(--mantine-color-dark-4);
+  --sp-grid-rowline: var(--mantine-color-dark-5);
+  --sp-grid-hover: rgba(116, 143, 252, 0.08);
+  --sp-grid-selected: rgba(116, 143, 252, 0.22);
+  --sp-grid-accent: var(--mantine-color-indigo-4);
+  --sp-tip-bg: var(--mantine-color-gray-2);
+  --sp-tip-fg: var(--mantine-color-black);
+  --sp-bar-score: var(--mantine-color-grape-4);
+  --sp-bar-match: var(--mantine-color-teal-5);
+}
+
+/* ---------------------------------------------------------------- header */
+.sp-hero > :first-child {
+  min-width: 0;
+}
+.sp-sub {
+  min-height: 1.1rem;
+}
+.sp-mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.74rem;
+  color: var(--mantine-color-dimmed);
+  word-break: break-all;
+}
+.sp-facts {
+  flex-shrink: 0;
+}
+.sp-fact {
+  min-width: 104px;
+  padding: 8px 14px;
+  border-radius: var(--mantine-radius-md);
+}
+.sp-fact-label {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+.sp-fact-value {
+  font-size: 1.12rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sp-fact-sub {
+  font-size: 0.68rem;
+  color: var(--mantine-color-dimmed);
+  font-family: var(--mantine-font-family-monospace);
+  white-space: nowrap;
+}
+.sp-derived {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-family: var(--mantine-font-family);
+  font-size: 0.62rem;
+  font-weight: 650;
+  line-height: 1.5;
+  color: var(--mantine-color-grape-light-color);
+  background: var(--mantine-color-grape-light);
+  cursor: help;
+}
+.sp-runs {
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------- navigation */
+.sp-controls {
+  row-gap: 8px;
+}
+.sp-controls .mantine-Divider-root {
+  align-self: stretch;
+  margin: 4px 2px;
+}
+.sp-nav {
+  margin-top: 10px;
+}
+.sp-nav .js-plotly-plot .plotly .cursor-pointer,
+.sp-nav .js-plotly-plot .nsewdrag {
+  cursor: pointer;
+}
+/* The slider lines up with the strip's plot area (spectra_figures.NAV_MARGIN). */
+.sp-slider {
+  padding: 2px 14px 4px 52px;
+}
+.sp-note {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--mantine-color-dimmed);
+  margin-top: 6px;
+}
+.sp-note:empty {
+  display: none;
+}
+.sp-note-main {
+  cursor: help;
+}
+
+/* ---------------------------------------------------------------- columns */
+.sp-main {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: var(--mantine-spacing-lg);
+  align-items: start;
+}
+.sp-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+  min-width: 0;
+}
+@media (max-width: 1199px) {
+  .sp-main {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sp-col {
+    display: contents;
+  }
+  #sp-spec-card {
+    order: 1;
+  }
+  #sp-cand-card {
+    order: 2;
+  }
+  #sp-frag-card {
+    order: 3;
+  }
+  #sp-details-card {
+    order: 4;
+  }
+}
+
+/* ---------------------------------------------------------------- spectrum */
+.sp-seq:empty {
+  display: none;
+}
+.sp-seq {
+  margin: -4px 0 4px;
+  overflow-x: auto;
+}
+.sp-spectrum .mv-graph {
+  min-height: 400px;
+}
+.sp-chips {
+  margin-top: 4px;
+}
+.sp-chips .mantine-Badge-root {
+  text-transform: none;
+}
+.sp-frag-pep .mv-pep {
+  font-weight: 700;
+}
+.sp-link {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--mantine-color-indigo-6);
+  text-decoration: none;
+}
+.sp-link:hover {
+  text-decoration: underline;
+}
+[data-mantine-color-scheme="dark"] .sp-link {
+  color: var(--mantine-color-indigo-3);
+}
+
+/* ---------------------------------------------------------------- candidate list */
+.sp-title-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sp-gridbox {
+  height: 304px;
+  margin: 0 calc(-1 * var(--mantine-spacing-md));
+  border-top: 1px solid var(--sp-grid-border);
+  border-bottom: 1px solid var(--sp-grid-border);
+}
+.sp-grid .ag-cell {
+  display: flex;
+  align-items: center;
+}
+.sp-grid .ag-right-aligned-cell {
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+.sp-grid .ag-row {
+  cursor: pointer;
+}
+.sp-grid .mv-spark-cell {
+  gap: 5px;
+}
+.sp-grid .mv-spark {
+  height: 7px;
+}
+.sp-grid .mv-spark-text {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 11.5px;
+}
+.sp-grid .mv-pep {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The selected candidate: tinted, with an accent bar at its left edge. */
+.sp-grid .sp-row-selected {
+  background-color: var(--sp-grid-selected);
+}
+.sp-grid .sp-row-selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--sp-grid-accent);
+  z-index: 2;
+}
+.sp-grid .sp-row-selected .mv-pep {
+  color: var(--mantine-color-indigo-8);
+  font-weight: 650;
+}
+[data-mantine-color-scheme="dark"] .sp-grid .sp-row-selected .mv-pep {
+  color: var(--mantine-color-indigo-2);
+}
+.sp-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--sp-grid-dim);
+}
+.sp-open:hover {
+  color: var(--sp-grid-accent);
+  background: var(--sp-grid-hover);
+}
+.sp-open-icon {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  background-color: currentColor;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-size: contain;
+  mask-position: center;
+  -webkit-mask-position: center;
+}
+.sp-match {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 11.5px;
+}
+.sp-match-bar {
+  width: 14px;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--sp-grid-rowline);
+  overflow: hidden;
+}
+.sp-match-fill {
+  height: 100%;
+  background: var(--sp-bar-match);
+}
+.sp-dim {
+  color: var(--sp-grid-dim);
+}
+
+/* ---------------------------------------------------------------- fragments */
+.sp-ladder {
+  max-height: 420px;
+  overflow: auto;
+}
+.sp-iso {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.sp-iso th {
+  text-align: left;
+  font-weight: 650;
+  font-size: 0.72rem;
+  color: var(--mantine-color-dimmed);
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  white-space: nowrap;
+}
+.sp-iso td {
+  padding: 6px 6px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  font-variant-numeric: tabular-nums;
+}
+.sp-iso .mv-num {
+  text-align: right;
+}
+
+/* ---------------------------------------------------------------- scan details */
+.sp-kvs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px 14px;
+}
+.sp-kv {
+  min-width: 0;
+}
+.sp-kv-label {
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+.sp-kv-value {
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-footer {
+  padding-bottom: 8px;
+}
+
+.sp-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--mantine-color-indigo-light-color);
+  background: var(--mantine-color-indigo-light);
+  cursor: pointer;
+}
+.sp-jump:hover {
+  background: var(--mantine-color-indigo-light-hover);
+}

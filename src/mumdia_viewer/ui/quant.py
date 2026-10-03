@@ -571,10 +571,12 @@ def register(app, get_rs, base: str) -> None:
         Output({"type": "qq-cond", "run": ALL}, "value"),
         Output({"type": "qq-dot", "run": ALL}, "style"),
         Output("qq-cond-state", "children"),
-        Input(CONDITIONS_STORE, "data"),
+        # mv-conditions lives in the app shell: only a State here, so that this callback
+        # is not looked for on pages without the editor.
         Input({"type": "qq-cond", "run": ALL}, "value"),
         Input("qq-cond-reset", "n_clicks"),
-        State("qq-suggest", "data"),
+        Input("qq-suggest", "data"),
+        State(CONDITIONS_STORE, "data"),
         State({"type": "qq-cond", "run": ALL}, "id"),
         State("qq-palette", "data"),
     )

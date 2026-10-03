@@ -38,7 +38,7 @@
       // Typing writes the store (the inputs keep what was typed); the reset button
       // removes this result set's runs from the store; the first call and a store
       // changed elsewhere set the inputs.
-      conditions: function (stored, values, reset, suggest, ids, palette) {
+      conditions: function (values, reset, suggest, stored, ids, palette) {
         const runs = (ids || []).map(function (i) {
           return i.run;
         });

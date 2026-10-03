@@ -559,7 +559,7 @@
       "click",
       function (ev) {
         const b = ev.target && ev.target.closest ? ev.target.closest("#scan-prev, #scan-next, #scan-apex") : null;
-        if (!b || b.disabled || !cur.grid) {
+        if (!b || b.disabled || !cur.grid || !b.closest(".pd-page")) {
           return;
         }
         ev.preventDefault();

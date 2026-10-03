@@ -304,8 +304,10 @@ def layout(ctx: PageContext) -> Any:
             "rowHeight": 30,
             "headerHeight": 34,
             "animateRows": False,
-            "overlayNoRowsTemplate": "No notes yet. Open a precursor page and give a verdict "
-            "(keys A, R, U).",
+            "localeText": {
+                "noRowsToShow": "No notes yet. Open a precursor page and give a verdict "
+                "(keys A, R, U)."
+            },
         },
         className="ag-theme-quartz nt-grid",
         style={"height": "min(70vh, 640px)", "width": "100%"},
