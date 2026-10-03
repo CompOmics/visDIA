@@ -6,11 +6,19 @@ It opens a run or an experiment directory and shows the identifications, the
 evidence behind each one (XICs, spectra, decoy competition), the calibrations,
 the quantification, and the differences between two result sets.
 
-Status: milestone 2 (the P0 views: run overview, identification browser and precursor
-detail) is done; the P1 and P2 views follow. The viewer reads MuMDIA v0.5.0 outputs (and
-the schema versions of earlier releases) and never writes to a run directory.
+Status: all views of the specification are built: the run overview, the
+identification browser and the precursor detail (P0); calibration, run QC, quant QC
+and the protein view (P1); experiment views, compare, the spectrum browser, export and
+validation notes (P2). The viewer reads MuMDIA v0.5.0 outputs, and the schema versions
+of earlier releases. It never writes to a run directory.
 
 ![The identification page](docs/screenshots/m2/04_identifications_proteins.png)
+
+## Install
+
+```bash
+pip install .                     # or the wheel: pip install mumdia_viewer-*.whl
+```
 
 ## Install (development)
 
@@ -25,7 +33,7 @@ Python 3.11 or newer.
 ## Run the viewer
 
 ```bash
-mumdia-viewer <run-or-experiment-dir> [--fasta <proteins.fasta>] [--port N]
+mumdia-viewer <run-or-experiment-dir> [--fasta <proteins.fasta>] [--compare <other-dir>] [--port N]
 ```
 
 The viewer serves at `http://127.0.0.1:<port>/<token>/` and opens a browser. The random
@@ -39,25 +47,16 @@ token in the address keeps other users of a shared machine out.
 - **Inputs that moved:** `--remap OLD=NEW` says where inputs recorded under `OLD` are
   now.
 
-Pages:
+The [user guide](docs/user-guide.md) describes every page, the options, where the viewer
+keeps its files, and how to solve common problems.
 
-- **Overview:** what was run, the counts per unit at the threshold, with a slider that
-  shows the exact counts at each stop. Also the identification curves, score
-  distributions, per-run counts, stage timings, inputs, artifacts and configuration.
-- **Identifications:** linked panels in the manner of PeptideShaker. Protein groups,
-  then the selected group's peptides with its sequence coverage, then the selected
-  peptide's precursors, then a preview of the selected precursor.
-- **Precursor detail:** why one identification was accepted.
-  - Fragment and MS1 XICs, linked to the spectrum mirror (scan stepping, the
-    fragmentation diagram, the ion table).
-  - Every q value with its unit, and the evidence with the run's percentiles.
-  - The base-peptide competition, the decoy partner, quantification and protein
-    coverage.
+| | |
+|---|---|
+| ![Protein page](docs/screenshots/views/protein.png) | ![Calibration](docs/screenshots/views/calibration.png) |
+| ![Run QC](docs/screenshots/views/run_qc.png) | ![Compare](docs/screenshots/views/compare.png) |
 
 Every number is MuMDIA's own column. A number the viewer derives (a percentile, a
-coverage, a viewer-side spectrum match) says so where it is shown. See the
-[P0 checklist](docs/m2-p0-checklist.md) for what each view shows and the measured
-timings.
+coverage, a CV, a viewer-side spectrum match) says so where it is shown.
 
 ## The data layer
 
