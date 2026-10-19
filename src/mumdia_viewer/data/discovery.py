@@ -55,6 +55,20 @@ RUN_FILES: dict[str, str] = {
     "overlap_losers": "groups/overlap_losers.parquet",
 }
 
+# The per-run tables a second pass (``mbr.strategy = second_pass``, the default of
+# ``run-experiment`` since MuMDIA 0.7) writes again under ``second_pass/<run>/``. The run's
+# ``scored.parquet`` split, its quantities and the experiment's ``scored_combined.parquet``
+# are the second pass's, so these must be too: the candidate ids of the two passes differ.
+# The converted spectra are shared and stay in ``<run>/spectra``.
+SECOND_PASS_RUN_FILES: tuple[str, ...] = (
+    "psms_extracted",
+    "features",
+    "psms_competed",
+    "chromatograms",
+    "run_windows",
+    "seed_psms",
+)
+
 # Fixed file names inside a band directory ``groups/gNN``.
 BAND_FILES: dict[str, str] = {
     "chromatograms": "chromatograms.parquet",
@@ -809,6 +823,8 @@ def _open_experiment(
     if deeplc_lib is not None:
         extra["fragment_library_precursors_deeplc"] = deeplc_lib
 
+    second_pass = _second_pass(b, root, exp, top, run_names, extra)
+
     runs: list[Run] = []
     for index, name in enumerate(run_names):
         run_root = root / name
@@ -829,6 +845,26 @@ def _open_experiment(
         peaks = _peaks_sidecar(b, run_root, f"psms_extracted_peaks[{name}]")
         if peaks is not None:
             artifacts["psms_extracted_peaks"] = peaks
+        side = b.side_files(run_root)
+        sp_root = second_pass.get(index) if second_pass else None
+        if sp_root is not None:
+            for kind in SECOND_PASS_RUN_FILES:
+                found = b.from_path(
+                    kind,
+                    f"{kind}[{name}]",
+                    sp_root / RUN_FILES[kind],
+                    resolution="second pass",
+                )
+                if found is not None:
+                    artifacts[kind] = found
+                else:
+                    artifacts.pop(kind, None)
+            sp_peaks = _peaks_sidecar(b, sp_root, f"psms_extracted_peaks[{name}]")
+            if sp_peaks is not None:
+                artifacts["psms_extracted_peaks"] = sp_peaks
+            else:
+                artifacts.pop("psms_extracted_peaks", None)
+            side.update(b.side_files(sp_root))
         grouped = _grouped_layout(b, run_root, {}, f"{name}/", artifacts)
         runs.append(
             Run(
@@ -836,7 +872,7 @@ def _open_experiment(
                 index=index,
                 root=run_root,
                 artifacts=artifacts,
-                side_files=b.side_files(run_root),
+                side_files=side,
                 grouped=grouped,
             )
         )
@@ -844,6 +880,11 @@ def _open_experiment(
             b.notice("missing_run", f"run directory {run_root} does not exist.")
 
     _attach_rt_libraries(b, root, runs, extra)
+    if second_pass and "fragment_library_precursors" in extra:
+        # The second pass searched the empirical library with its consensus retention
+        # times (`rt_im_train.library_irt = library`), so that is every run's RT library.
+        for run in runs:
+            run.artifacts["rt_library"] = extra["fragment_library_precursors"]
     dirs = [root] + [r.root for r in runs] + [r.root / "spectra" for r in runs]
     tmp = _in_progress(dirs)
     if tmp:
@@ -872,6 +913,69 @@ def _open_experiment(
         duck=duck,
         allow_unreleased=allow_unreleased,
     )
+
+
+def _second_pass(
+    b: _Builder,
+    root: Path,
+    exp: Mapping[str, Any],
+    top: Mapping[str, ArtifactRecord],
+    run_names: list[str],
+    extra: dict[str, Artifact],
+) -> dict[int, Path]:
+    """The second pass of a match-between-runs experiment, when one was applied.
+
+    MuMDIA (0.7, ``mbr.strategy = second_pass``) records ``experiment.mbr = "SecondPass"``
+    and ``experiment.second_pass`` with the run directories (``second_pass/<run>``, in run
+    order) and the empirical library it searched. ``second_pass`` is null when the pass
+    fell back to the first, and then nothing changes. Returns the second-pass directory of
+    each run index, and replaces the searched library in ``extra`` by the empirical one,
+    keeping the first pass's under ``first_pass_library_*``.
+    """
+    info = exp.get("second_pass")
+    if str(exp.get("mbr", "None")) != "SecondPass" or not isinstance(info, Mapping):
+        return {}
+    dirs: dict[int, Path] = {}
+    recorded = list(info.get("runs") or [])
+    for index, name in enumerate(run_names):
+        candidate = None
+        if index < len(recorded):
+            resolved = b.resolver.resolve(str(recorded[index]))
+            candidate = resolved.path
+        if candidate is None or not candidate.is_dir():
+            candidate = root / "second_pass" / name
+        if candidate.is_dir():
+            dirs[index] = candidate
+        else:
+            b.notice(
+                "missing_second_pass",
+                f"the second pass of run {name} was not found (expected {candidate}); its "
+                "evidence tables come from the first pass and will not match its scores.",
+            )
+    lib = info.get("library") if isinstance(info.get("library"), Mapping) else {}
+    for name, record_key, lib_key in (
+        ("fragment_library_precursors", "empirical_library_precursors", "precursors"),
+        ("fragment_library_fragments", "empirical_library_fragments", "fragments"),
+    ):
+        found = None
+        if record_key in top:
+            found = b.from_record(top[record_key], kind=name)
+        elif lib.get(lib_key):
+            resolved = b.resolver.resolve(str(lib[lib_key]))
+            if resolved.path is not None:
+                found = b.from_path(name, record_key, resolved.path, resolution=resolved.how)
+        if found is not None and found.path is not None:
+            if name in extra:
+                extra[f"first_pass_library_{name.rsplit('_', 1)[-1]}"] = extra[name]
+            extra[name] = found
+    if dirs:
+        b.notice(
+            "second_pass",
+            "match-between-runs by a second pass: the scores, chromatograms, features and "
+            "library shown are the second pass's (second_pass/); the first pass is kept in "
+            "first_pass/.",
+        )
+    return dirs
 
 
 def _attach_rt_libraries(
