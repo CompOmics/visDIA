@@ -282,3 +282,90 @@ def test_all_artifacts_yields_each_artifact_once_with_its_directory(open_fixture
     assert "" in scopes and "groups/g00" in scopes and "chromatograms" in scopes["groups/g01"]
     exp = open_fixture("experiment")
     assert {s for s, _ in exp.all_artifacts()} >= {"", "a", "b"}
+
+
+def _make_second_pass(root: Path, *, applied: bool) -> None:
+    """Turn the two-run experiment fixture into a MuMDIA 0.7 second-pass layout: every run's
+    evidence tables copied under ``second_pass/<run>/`` and the library under
+    ``second_pass/library/``, recorded as ``experiment.second_pass`` (null when the second
+    pass fell back to the first)."""
+    manifest_path = root / "experiment_manifest.json"
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    runs = [str(r) for r in data["experiment"]["runs"]]
+    sp = root / "second_pass"
+    for name in runs:
+        dst = sp / name
+        dst.mkdir(parents=True)
+        for src in (root / name).iterdir():
+            if src.is_file() and src.name.split(".")[0] in (
+                "psms_extracted",
+                "features",
+                "psms_competed",
+                "chromatograms",
+                "run_windows",
+                "seed_psms",
+                "cal",
+            ):
+                shutil.copy2(src, dst / src.name)
+    lib = sp / "library"
+    lib.mkdir()
+    shutil.copy2(root / "fragment_library_precursors.parquet", lib / "lib_precursors.parquet")
+    shutil.copy2(root / "fragment_library_fragments.parquet", lib / "lib_fragments.parquet")
+    data["experiment"]["mbr"] = "SecondPass"
+    data["experiment"]["second_pass"] = (
+        {
+            "runs": [str(sp / name) for name in runs],
+            "library": {
+                "precursors": str(lib / "lib_precursors.parquet"),
+                "fragments": str(lib / "lib_fragments.parquet"),
+            },
+        }
+        if applied
+        else None
+    )
+    manifest_path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_second_pass_evidence_and_library_come_from_the_second_pass(fixture_dir, tmp_path: Path):
+    # The scores of a second-pass experiment are the second pass's, whose candidate ids
+    # differ from the first pass's: chromatograms, features and the library must follow,
+    # or every candidate shows "No chromatogram rows".
+    root = _copy(fixture_dir("experiment"), tmp_path / "exp")
+    _make_second_pass(root, applied=True)
+    rs = open_results(root)
+    assert "second_pass" in rs.notice_codes()
+    for run in rs.runs:
+        for kind in ("chromatograms", "psms_extracted", "features", "psms_competed", "run_windows"):
+            path = run.artifacts[kind].path
+            assert path is not None and path.parent == root / "second_pass" / run.name, (kind, path)
+        assert run.side_files["cal"].parent == root / "second_pass" / run.name
+        # Spectra are shared by the two passes and stay in the run directory.
+        assert run.artifacts["spectra_ms2"].path.parent == root / run.name / "spectra"
+        assert (
+            run.artifacts["rt_library"].path
+            == root / "second_pass" / "library" / "lib_precursors.parquet"
+        )
+    assert (
+        rs.extra["fragment_library_precursors"].path
+        == root / "second_pass" / "library" / "lib_precursors.parquet"
+    )
+    assert (
+        rs.extra["fragment_library_fragments"].path
+        == root / "second_pass" / "library" / "lib_fragments.parquet"
+    )
+    assert (
+        rs.extra["first_pass_library_precursors"].path
+        == root / "fragment_library_precursors.parquet"
+    )
+
+
+def test_a_second_pass_that_fell_back_changes_nothing(fixture_dir, tmp_path: Path):
+    root = _copy(fixture_dir("experiment"), tmp_path / "exp")
+    _make_second_pass(root, applied=False)
+    rs = open_results(root)
+    assert "second_pass" not in rs.notice_codes()
+    for run in rs.runs:
+        assert run.artifacts["chromatograms"].path.parent == root / run.name
+    assert (
+        rs.extra["fragment_library_precursors"].path == root / "fragment_library_precursors.parquet"
+    )
