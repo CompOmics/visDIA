@@ -829,6 +829,41 @@ def ids_across_rt(
     return out
 
 
+def ids_im(
+    rs: ResultSet, run: Run | str | int | None, t: float, limit: int = 20000
+) -> pd.DataFrame:
+    """Accepted target identifications of a diaPASEF run at the apex 1/K0 of their selected
+    peak: ``precursor_mz`` and ``apex_im`` from ``psms_extracted`` (``peak_rank`` =
+    ``selected_peak_rank``). An even sample of at most ``limit`` rows; empty without IM or
+    without the run's psms_extracted (grouped runs)."""
+    r = _run(rs, run)
+    art = r.artifact("psms_extracted")
+    if not r.has_im or art is None or not art.usable:
+        return pd.DataFrame(columns=["precursor_mz", "apex_im"])
+    key = ("qc.ids_im", rs.scored.identity(), r.index, float(t), limit)
+    hit = rs._memo.get(key)
+    if hit is not None:
+        return hit
+    cls = count_classes(rs)
+    where, params = _accepted(rs, r, t, cls.target)
+    rank = (
+        "COALESCE(selected_peak_rank, 0)"
+        if "selected_peak_rank" in rs.scored.parquet().schema.names
+        else "0"
+    )
+    sql = (
+        "SELECT e.precursor_mz, e.apex_im FROM "
+        f"(SELECT candidate_id, {rank} AS rank FROM read_parquet($path) WHERE {where}) s "
+        "JOIN read_parquet($ext) e ON e.candidate_id = s.candidate_id "
+        "AND e.peak_rank = s.rank WHERE e.apex_im > 0 ORDER BY e.precursor_mz"
+    )
+    df = rs.duck.df(sql, bind_params(sql, {**params, "ext": sql_path(art.require())}))
+    if len(df) > limit:
+        df = df.iloc[np.linspace(0, len(df) - 1, limit).astype(np.int64)].reset_index(drop=True)
+    rs._memo[key] = df
+    return df
+
+
 def ids_in_rt_range(
     rs: ResultSet,
     run: Run | str | int | None,

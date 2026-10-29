@@ -418,7 +418,7 @@ def layout(ctx: PageContext) -> Any:
 
     win_card = cards.windows_card(
         ws,
-        qf.windows_figure(ws, scheme) if ws is not None else None,
+        qf.windows_figure(ws, scheme, ids=qcd.ids_im(rs, run, t)) if ws is not None else None,
         error=next(iter(acq.notes), None),
     )
     if not has_ms2:
@@ -555,7 +555,11 @@ def register(app, get_rs, base: str) -> None:
         )
         ws = scheme_of(rs, run)
         windows = (
-            qf.windows_figure(ws, _scheme(scheme), selected=window) if ws is not None else no_update
+            qf.windows_figure(
+                ws, _scheme(scheme), selected=window, ids=qcd.ids_im(rs, run, parse_threshold(t))
+            )
+            if ws is not None
+            else no_update
         )
         return fig, {"level": level, "window": window}, note, cards.window_style(level), windows
 

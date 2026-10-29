@@ -40,7 +40,7 @@ RELEASED: dict[str, frozenset[int]] = {
     "psms_scored": frozenset({4}),
     "peptide_quant": frozenset({2}),
     "protein_group_quant": frozenset({2}),
-    "fragment_quant": frozenset({1}),
+    "fragment_quant": frozenset({1, 5}),  # 5: cross-run export (extra per-fragment columns)
     "lfq_maxlfq": frozenset({1}),
     "overlap_losers": frozenset({1}),
     "alignment": frozenset({1}),
@@ -54,15 +54,24 @@ DEV_BUILD: dict[str, frozenset[int]] = {
     "psms_extracted": frozenset({1}),
 }
 
-# Versions on the unreleased ion-mobility branch (PR #140, origin/IM).
-UNRELEASED_IM: dict[str, frozenset[int]] = {
-    "spectra_ms1": frozenset({2, 3}),
-    "spectra_ms2": frozenset({2, 3}),
+# Versions written on Bruker diaPASEF input by MuMDIA 0.7.0 and later (native `.d` reader,
+# docs/35_diapasef.md of the engine). A 3D run of the same releases writes the versions above.
+DIAPASEF: dict[str, frozenset[int]] = {
+    "spectra_ms1": frozenset({2}),
+    "spectra_ms2": frozenset({2}),
     "isolation_windows": frozenset({2}),
     "fragment_library_precursors": frozenset({2}),
     "seed_psms": frozenset({2}),
-    "psms_extracted": frozenset({3, 4, 5}),
+    "psms_extracted": frozenset({4}),
     "chromatograms": frozenset({3, 4}),
+}
+
+# Versions written only by the unreleased ion-mobility engine branch (PR #140, origin/IM),
+# which 0.7.0 superseded.
+UNRELEASED_IM: dict[str, frozenset[int]] = {
+    "spectra_ms1": frozenset({3}),
+    "spectra_ms2": frozenset({3}),
+    "psms_extracted": frozenset({3, 5}),
 }
 
 VersionSource = Literal["manifest", "report", "inferred", "unrecorded"]
@@ -90,6 +99,7 @@ def supported_versions(schema_name: str, *, allow_unreleased: bool = False) -> f
     """Versions of ``schema_name`` this viewer reads."""
     versions = set(RELEASED.get(schema_name, frozenset()))
     versions |= DEV_BUILD.get(schema_name, frozenset())
+    versions |= DIAPASEF.get(schema_name, frozenset())
     if allow_unreleased:
         versions |= UNRELEASED_IM.get(schema_name, frozenset())
     return frozenset(versions)
@@ -114,8 +124,8 @@ def check_version(
         raise SchemaVersionError(
             f"{where}: {schema_name} schema version {version} is written by the unreleased "
             f"ion-mobility branch of MuMDIA (PR #140). This viewer reads versions {listed}. "
-            "Ion-mobility layouts can be enabled with allow_unreleased=True, but they are not "
-            "validated on real data yet."
+            "MuMDIA 0.7.0 and later write the released diaPASEF versions; this layout can be "
+            "enabled with allow_unreleased=True, but it is not validated on real data."
         )
     newest = max(supported) if supported else None
     hint = (
@@ -340,8 +350,8 @@ def chromatogram_layout(schema: pa.Schema, *, where: str = "chromatograms") -> C
     )
 
 
-# Released schemas whose contract has no ion-mobility column; an IM column in such a file
-# means the unreleased ion-mobility layout (PR #140).
+# Schemas whose 3D contract has no ion-mobility column; an IM column in such a file means
+# the diaPASEF version.
 _NO_IM_RELEASED = frozenset(
     {"spectra_ms1", "spectra_ms2", "isolation_windows", "fragment_library_precursors", "seed_psms"}
 )
@@ -351,20 +361,19 @@ _IM_COLUMN = re.compile(r"(^|_)im($|_)")
 def infer_version(schema_name: str, schema: pa.Schema) -> int | None:
     """Infer the version of a file that has neither a manifest record nor a report.
 
-    A file of a schema whose released versions have no ion-mobility column, but which
-    holds one, is given the newest ion-mobility version, so that it is refused unless
-    ``allow_unreleased`` is set.
+    A file of a schema whose 3D versions have no ion-mobility column, but which holds one,
+    is given its diaPASEF version.
     """
     names = set(schema.names)
     if schema_name in _NO_IM_RELEASED and any(_IM_COLUMN.search(n) for n in names):
-        versions = UNRELEASED_IM.get(schema_name)
-        if versions:
-            return max(versions)
+        return max(DIAPASEF[schema_name])
     if schema_name == "chromatograms":
         return chromatogram_layout(schema).schema_version
     if schema_name == "psms_scored":
         return 4 if "selected_peak_rank" in names else 3
     if schema_name == "psms_extracted":
+        if "apex_im_mad" in names:
+            return 4
         return 2 if "peak_rank" in names else 1
     if all(c in names for c in REQUIRED_COLUMNS.get(schema_name, ())) and schema_name in RELEASED:
         released = RELEASED[schema_name]

@@ -79,7 +79,8 @@ def test_page_builds_with_unique_ids(open_fixture, name, scheme):
         "sp-level",
     ):
         assert json.dumps(needed) in ids, needed
-    assert len(graphs) == 2
+    # The spectrum and the RT strip; the 1/K0 peak map is in the layout but hidden on 3D.
+    assert len(graphs) == 3
     assert ("sp-run" in " ".join(ids)) == rs.is_experiment
 
 
@@ -359,6 +360,8 @@ def test_show_callback_follows_threshold_and_selection(single_app):
         {"id": "sp-cid", "property": "data", "value": stores["sp-cid"]},
         {"id": "sp-labels", "property": "value", "value": "25"},
         {"id": "sp-scale", "property": "value", "value": "base"},
+        {"id": "sp-im-mode", "property": "value", "value": "cand"},
+        {"id": "sp-im-range", "property": "value", "value": [0.0, 1.0]},
     ]
     state = [
         {"id": "sp-key", "property": "data", "value": stores["sp-key"]},

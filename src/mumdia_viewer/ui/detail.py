@@ -418,8 +418,13 @@ def layout(ctx: PageContext) -> Any:
         [
             html.Div(
                 [
-                    cards.xic_card(ctx, d, frags, grid, key=f"{run}|{int(cid)}", views=views),
-                    cards.rt_card(d, xr, pct_map),
+                    c
+                    for c in (
+                        cards.xic_card(ctx, d, frags, grid, key=f"{run}|{int(cid)}", views=views),
+                        cards.rt_card(d, xr, pct_map),
+                        cards.im_trace_card(ctx, d, frags),
+                    )
+                    if c is not None
                 ],
                 className="pd-col",
             ),

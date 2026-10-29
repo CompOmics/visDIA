@@ -1,0 +1,32 @@
+{
+  "logical_name": "isolation_windows",
+  "schema_name": "isolation_windows",
+  "schema_version": 2,
+  "stage": "convert",
+  "rows": 24,
+  "content_hash": null,
+  "params": {
+    "config_hash": "f78e24af79eecb9b1a63479b306118bcecd1c04c627f1d188361c6cc7c7dab7a",
+    "instrument": {
+      "accession": "",
+      "astral_analyzer": false,
+      "name": "timsTOF SCP"
+    },
+    "max_spectra": 0,
+    "mzml": "/public/compomics2/Robbe/HYE_diaPASEF_mumdia/raw/ttSCP_diaPASEF_Condition_A_Sample_Alpha_01_11494.d",
+    "reader": "timsrust",
+    "tdf_im_gap_scans": 30,
+    "tdf_im_smooth_scans": 8.0,
+    "tdf_im_valley": 0.5,
+    "tdf_min_points": 2,
+    "tdf_ms1_denoise": true,
+    "tdf_mz_ppm": 10.0,
+    "tdf_mz_smooth_ppm": 8.0,
+    "tdf_mz_valley": 0.5,
+    "top_peaks_ms1": 0,
+    "top_peaks_ms2": 0
+  },
+  "stats": {},
+  "model_identity": null,
+  "elapsed_ms": 29704
+}

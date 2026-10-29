@@ -57,6 +57,8 @@ EXTRACTED_COLUMNS = (
     "peak_rank",
     "apex_rt",
     "apex_im",
+    "apex_im_mad",
+    "ms1_apex_im",
     "apex_intensity",
     "n_matched_fragments",
     "n_predicted_fragments",
@@ -243,6 +245,7 @@ def _peak_rows(rs: ResultSet, run: Run, cid: int) -> tuple[pd.DataFrame, str]:
         cid,
         [
             "apex_rt",
+            "apex_im",
             "elution_lo",
             "elution_hi",
             "precursor_mz",
@@ -280,6 +283,13 @@ LABELS: dict[str, str] = {
     "rt_window": "Extraction window",
     "rt_error": "RT error (apex - prediction)",
     "rt_error_rel": "RT error relative to the half-window",
+    "apex_im": "Apex 1/K0",
+    "apex_im_mad": "Spread of the fragment 1/K0 at the apex",
+    "ms1_apex_im": "MS1 precursor 1/K0",
+    "im_pred_cal": "Calibrated 1/K0 prediction",
+    "im_window": "1/K0 extraction window",
+    "im_error": "1/K0 error (apex - prediction)",
+    "im_error_rel": "1/K0 error relative to the half-window",
     "ms1_mono": "MS1 monoisotopic intensity",
     "ms1_iso1": "MS1 +1 isotope intensity",
     "ms1_iso2": "MS1 +2 isotope intensity",
@@ -441,6 +451,19 @@ def _evidence(rs: ResultSet, d: PrecursorDetail) -> list[EvidenceItem]:
             )
         else:
             add(_feature_item(f, "spectral_angle_matched", "fragments"))
+    # diaPASEF: do the fragments agree in 1/K0 (absent on 3D runs).
+    mad = _finite(peak.get("apex_im_mad"))
+    if mad is not None:
+        add(
+            _item(
+                "fragments",
+                "apex_im_mad",
+                mad,
+                unit="1/K0",
+                source=f"{d.peaks_source}: apex_im_mad (features: im_frag_mad)",
+            )
+        )
+    add(_feature_item(f, "im_elution_frag_sd", "fragments"))
 
     # Co-elution.
     coel = peak.get("coelution_run")
@@ -535,6 +558,48 @@ def _evidence(rs: ResultSet, d: PrecursorDetail) -> list[EvidenceItem]:
                         derived=True,
                     )
                 )
+
+    # Ion mobility (diaPASEF): the extracted peak's 1/K0 against the calibrated prediction.
+    im = _finite(peak.get("apex_im"))
+    if im is not None:
+        src = d.peaks_source
+        add(_item("im", "apex_im", im, unit="1/K0", source=f"{src}: apex_im"))
+        if _finite(peak.get("ms1_apex_im")) is not None:
+            ms1 = _finite(peak.get("ms1_apex_im"))
+            add(_item("im", "ms1_apex_im", ms1, unit="1/K0", source=f"{src}: ms1_apex_im"))
+        if w is not None and w.im_pred_cal is not None:
+            add(_item("im", "im_pred_cal", w.im_pred_cal, unit="1/K0", source=w.source))
+            add(_item("im", "im_window", (w.im_lo, w.im_hi), unit="1/K0", source=w.source))
+            err = im - w.im_pred_cal
+            add(
+                _item(
+                    "im",
+                    "im_error",
+                    err,
+                    unit="1/K0",
+                    source="viewer-derived: apex_im - im_pred_cal",
+                    derived=True,
+                )
+            )
+            if w.im_hi is not None and w.im_hi > w.im_pred_cal:
+                add(
+                    _item(
+                        "im",
+                        "im_error_rel",
+                        err / (w.im_hi - w.im_pred_cal),
+                        unit="fraction of the half-window",
+                        source="viewer-derived: (apex_im - im_pred_cal) / (im_hi - im_pred_cal)",
+                        derived=True,
+                    )
+                )
+    for name in (
+        "im_elution_error_abs",
+        "im_elution_sd",
+        "has_ms1_im",
+        "ms1_im_error_abs",
+        "ms1_frag_im_diff",
+    ):
+        add(_feature_item(f, name, "im"))
 
     # MS1.
     for name in ("ms1_mono", "ms1_iso1", "ms1_iso2"):
@@ -914,6 +979,10 @@ DEFAULT_PERCENTILE_FEATURES = (
     "rt_error_abs",
     "rt_error_over_peak_width",
     "log_apex_intensity",
+    "im_error_abs",
+    "im_frag_mad",
+    "im_elution_frag_sd",
+    "ms1_im_error_abs",
 )
 
 

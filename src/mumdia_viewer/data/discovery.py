@@ -34,7 +34,7 @@ from .errors import LayoutError, NotAResultDirectory, SchemaVersionError, Viewer
 from .manifest import ArtifactRecord, Manifest, band_index, load_manifest, split_key
 from .paths import PathResolver
 from .reports import Report, StageTiming, load_json, load_report, stage_timings
-from .schemas import VersionInfo, check_version
+from .schemas import DIAPASEF, VersionInfo, check_version
 
 # Fixed file names of the artifacts in a run directory (relative to the run root).
 RUN_FILES: dict[str, str] = {
@@ -155,6 +155,21 @@ class Run:
     def has(self, kind: str) -> bool:
         a = self.artifacts.get(kind)
         return a is not None and a.usable
+
+    @property
+    def has_im(self) -> bool:
+        """True when the run was searched with ion mobility (diaPASEF): its seed, extracted
+        PSMs or spectra are recorded at their diaPASEF schema version."""
+        sources = [
+            self.artifacts,
+            *(b.artifacts for b in (self.grouped.bands if self.grouped else [])),
+        ]
+        return any(
+            a.version.version in DIAPASEF[kind]
+            for artifacts in sources
+            for kind in ("seed_psms", "psms_extracted", "spectra_ms2")
+            if (a := artifacts.get(kind)) is not None and a.version.version is not None
+        )
 
 
 class ResultSet:

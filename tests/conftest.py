@@ -5,7 +5,8 @@ real MuMDIA outputs are marked ``real_data`` and read their paths from environme
 variables; they are skipped when the variable is unset:
 
 * ``MUMDIA_VIEWER_REAL_SINGLE``: a single-run directory (the Astral run);
-* ``MUMDIA_VIEWER_REAL_EXPERIMENT``: an experiment directory.
+* ``MUMDIA_VIEWER_REAL_EXPERIMENT``: an experiment directory;
+* ``MUMDIA_VIEWER_REAL_TIMS``: a diaPASEF single-run directory (MuMDIA >= 0.7).
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ FIXTURE_DIRS = {
     "ovl128": FIXTURES / "overlap" / "out_ovl128",
     "ovl128_pool": FIXTURES / "overlap" / "out_ovl128_pool",
     "entrapment": FIXTURES / "entrapment" / "entrap_mode",
+    "tims": FIXTURES / "im" / "out_tims",
 }
 
 
@@ -88,3 +90,8 @@ def real_single() -> Path:
 @pytest.fixture(scope="session")
 def real_experiment() -> Path:
     return _real("MUMDIA_VIEWER_REAL_EXPERIMENT")
+
+
+@pytest.fixture(scope="session")
+def real_tims() -> Path:
+    return _real("MUMDIA_VIEWER_REAL_TIMS")

@@ -354,6 +354,17 @@ class CalRecord:
     groups: tuple[dict[str, Any], ...] = ()
     groups_calibration: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
+    # Ion mobility (diaPASEF): a linear fit in CCS space, per charge, and the 1/K0
+    # half-window ``w_im``. None on 3D runs (no ``im_*`` fields).
+    im_method: str | None = None
+    w_im: float | None = None
+    im_per_charge: dict[str, Any] = field(default_factory=dict)
+    im_holdout_resid_abs_median: float | None = None
+    im_in_sample_resid_abs_median: float | None = None
+
+    @property
+    def has_im(self) -> bool:
+        return self.im_method not in (None, "unavailable")
 
     @property
     def p_rt_width(self) -> float | None:
@@ -389,6 +400,11 @@ def cal_record(rs: ResultSet, run: Run | str | int, band: str | None = None) -> 
         groups=tuple(g for g in data.get("groups") or () if isinstance(g, dict)),
         groups_calibration=data.get("groups_calibration"),
         raw=dict(data),
+        im_method=data.get("im_method"),
+        w_im=_finite(data.get("w_im")),
+        im_per_charge=dict(data.get("im_per_charge") or {}),
+        im_holdout_resid_abs_median=_finite(data.get("im_holdout_resid_abs_median")),
+        im_in_sample_resid_abs_median=_finite(data.get("im_in_sample_resid_abs_median")),
     )
 
 
@@ -1179,7 +1195,7 @@ def _accepted_sql(
         'f."precursor_mz" AS precursor_mz' if "precursor_mz" in names else "NULL AS precursor_mz",
     ]
     rules: dict[str, str] = {}
-    for c in _ERROR_COLUMNS:
+    for c in (*_ERROR_COLUMNS, *(("im_error",) if "im_error" in names else ())):
         if c not in names:
             select += [f'NULL AS "{c}"', f'FALSE AS "valid_{c}"']
             continue
@@ -1333,6 +1349,10 @@ def _load(rs: ResultSet, s: Scope, ceiling: float) -> AcceptedErrors:
         values = pd.to_numeric(df[c], errors="coerce").to_numpy(dtype=np.float64)
         valid = df[f"valid_{c}"].fillna(False).to_numpy(dtype=bool)
         frame[out] = np.where(valid, values, np.nan)
+    if "im_error" in df:
+        values = pd.to_numeric(df["im_error"], errors="coerce").to_numpy(dtype=np.float64)
+        frame["im_error"] = np.where(df["valid_im_error"].fillna(False), values, np.nan)
+        labels["im_error"] = "im_error of the feature table: apex_im - im_pred_cal (1/K0)"
     hw, hw_source = _half_widths(rs, s, frame["candidate_id"].to_numpy(dtype=np.int64))
     frame["half_width"] = hw
     with np.errstate(invalid="ignore", divide="ignore"):

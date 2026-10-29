@@ -134,6 +134,15 @@ def _identity(rs: ResultSet, summary: overview_mod.RunSummary) -> Any:
                 tip="model_identities.fragment_predictor",
             )
         )
+    if any(run.has_im for run in rs.runs):
+        chips.append(
+            chip(
+                "ion mobility (diaPASEF)",
+                "pink",
+                tip="The spectra and evidence carry 1/K0 (native Bruker .d read by timsrust); "
+                "the detail, calibration and Run QC pages show it.",
+            )
+        )
     qf = summary.quant_q_filter
     if qf:
         differs = (

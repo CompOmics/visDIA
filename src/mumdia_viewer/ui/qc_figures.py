@@ -424,7 +424,11 @@ def spectrum_figure(
 
 
 def windows_figure(
-    ws: WindowScheme, scheme: str = "light", *, selected: int | None = None
+    ws: WindowScheme,
+    scheme: str = "light",
+    *,
+    selected: int | None = None,
+    ids: pd.DataFrame | None = None,
 ) -> go.Figure:
     """The isolation windows as m/z ranges, one row per window in acquisition order.
 
@@ -434,6 +438,8 @@ def windows_figure(
     df = ws.frame
     if df is None or not len(df):
         return empty_figure("no isolation windows", scheme)
+    if "im_lower" in df:
+        return _im_windows_figure(ws, scheme, selected=selected, ids=ids)
     n = len(df)
     width = 7 if n <= 40 else 4 if n <= 120 else 2.5
 
@@ -519,6 +525,94 @@ def windows_figure(
         hovermode="y",
         xaxis=dict(title="isolation window (m/z)"),
         yaxis=dict(title="acquisition order", autorange="reversed", tickformat="d"),
+    )
+
+
+def _im_windows_figure(
+    ws: WindowScheme, scheme: str, *, selected: int | None, ids: pd.DataFrame | None = None
+) -> go.Figure:
+    """The diaPASEF windows as rectangles in m/z x 1/K0; a centre marker per window carries
+    the hover and the click (its ``customdata[0]`` is the window id, as on 3D runs).
+    ``ids``: accepted identifications (``precursor_mz``, ``apex_im``) drawn as points."""
+    df = ws.frame
+
+    def boxes(part: pd.DataFrame) -> tuple[list[float | None], list[float | None]]:
+        xs: list[float | None] = []
+        ys: list[float | None] = []
+        for lo, hi, ilo, ihi in zip(
+            part["lower"], part["upper"], part["im_lower"], part["im_upper"], strict=True
+        ):
+            xs += [float(lo), float(hi), float(hi), float(lo), float(lo), None]
+            ys += [float(ilo), float(ilo), float(ihi), float(ihi), float(ilo), None]
+        return xs, ys
+
+    fig = go.Figure()
+    for part, color, width in (
+        (df, theme.TARGET, 1.2),
+        (df[df["window_id"] == selected] if selected is not None else df.iloc[:0], theme.DECOY, 3),
+    ):
+        if not len(part):
+            continue
+        xs, ys = boxes(part)
+        fig.add_trace(
+            go.Scatter(
+                x=xs,
+                y=ys,
+                mode="lines",
+                fill="toself",
+                line=dict(color=color, width=width),
+                opacity=0.55,
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+    if ids is not None and len(ids):
+        fig.add_trace(
+            go.Scattergl(
+                x=ids["precursor_mz"].to_numpy(dtype=np.float32),
+                y=ids["apex_im"].to_numpy(dtype=np.float32),
+                mode="markers",
+                name="accepted IDs",
+                marker=dict(size=2, color=theme.ACCEPT, opacity=0.35),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+    custom = np.column_stack(
+        [
+            df["window_id"].to_numpy(),
+            df["lower"].to_numpy(),
+            df["upper"].to_numpy(),
+            df["n_scans"].to_numpy(),
+            df["cycle_time_s"].to_numpy(),
+            df["im_lower"].to_numpy(),
+            df["im_upper"].to_numpy(),
+        ]
+    ).astype(np.float64)
+    fig.add_trace(
+        go.Scatter(
+            x=((df["lower"] + df["upper"]) / 2.0).to_numpy(),
+            y=((df["im_lower"] + df["im_upper"]) / 2.0).to_numpy(),
+            mode="markers",
+            marker=dict(size=10, color=theme.TARGET, opacity=0),
+            customdata=plain(custom),
+            hovertemplate=(
+                "window %{customdata[0]:.0f}: %{customdata[1]:.3f} to %{customdata[2]:.3f} "
+                "m/z<br>1/K0 %{customdata[5]:.4f} to %{customdata[6]:.4f}<br>"
+                "%{customdata[3]:,} scans, cycle %{customdata[4]:.3f} s"
+                "<extra>click: its MS2 TIC</extra>"
+            ),
+            showlegend=False,
+        )
+    )
+    return themed(
+        fig,
+        scheme,
+        height=330,
+        margin=dict(l=56, r=12, t=10, b=44),
+        hovermode="closest",
+        xaxis=dict(title="isolation window (m/z)"),
+        yaxis=dict(title="1/K0 (V s cm⁻²)"),
     )
 
 

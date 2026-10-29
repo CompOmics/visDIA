@@ -794,10 +794,14 @@ def test_evidence_feature_definitions(open_fixture, fixture_dir):
     rs = open_fixture("single")
     names = set(pq.read_schema(feature_source(rs, "").paths[0]).names)
     extracted = set(pq.read_schema(fixture_dir("single") / "psms_extracted.parquet").names)
-    assert len(EVIDENCE_FEATURES) == 29
+    assert len(EVIDENCE_FEATURES) == 38
+    im_family = {n for n in EVIDENCE_FEATURES if "im" in n.split("_")}
     for name, info in EVIDENCE_FEATURES.items():
         assert info.name == name and info.label and info.unit and info.description and info.note
         assert chr(0x2014) not in info.description + info.note  # no em dashes
+        if name in im_family:  # ion-mobility family: absent on 3D runs
+            assert name not in names, name
+            continue
         if info.table == "features":
             assert name in names, name
         assert set(info.validity_columns) <= names, name

@@ -49,6 +49,7 @@ import pandas as pd
 
 from .chromatograms import CandidateChromatogram, ChromatogramSource
 from .competition import Q_COLUMNS, WINNER_SOURCE, base_peptide_rows, winner_index
+from .detail import _peak_rows
 from .discovery import ResultSet, Run
 from .duck import sql_path
 from .errors import ViewerError
@@ -92,6 +93,7 @@ ROW_COLUMNS = (
     "q_value",
     "run_psm_q",
     "apex_rt",
+    "apex_im",
     "elution_lo",
     "elution_hi",
     "selected_peak_rank",
@@ -115,6 +117,7 @@ ROW_LABELS: dict[str, str] = {
     "q_value": "q_value: PSM rows pooled over the whole rescore (experiment-wide)",
     "run_psm_q": "run_psm_q: PSM rows of this run only, target-decoy re-run per run",
     "apex_rt": "apex_rt: the identification's apex (s)",
+    "apex_im": "apex_im: the 1/K0 at the apex of the selected peak (psms_extracted, diaPASEF)",
     "elution": "elution_lo to elution_hi: the identification's elution bounds (s)",
     "quantity": (
         "peptide_quant.quantity of the run's row: the sum of the top-N positive fragment "
@@ -273,6 +276,17 @@ def _row_of(run: Run, rows: pd.DataFrame) -> tuple[dict[str, Any], int]:
     return {k: _plain(v) for k, v in best.to_dict().items()}, len(mine)
 
 
+def _apex_im(rs: ResultSet, run: Run, cid: int, rank: Any) -> float | None:
+    """``apex_im`` of the selected peak of ``cid`` in ``run`` (psms_extracted); None when
+    the run has no such row (grouped runs drop psms_extracted)."""
+    peaks, _ = _peak_rows(rs, run, cid)
+    if peaks.empty or "apex_im" not in peaks:
+        return None
+    if "peak_rank" in peaks:
+        peaks = peaks[peaks["peak_rank"] == int(rank or 0)]
+    return _plain(peaks["apex_im"].iloc[0]) if len(peaks) else None
+
+
 def _build_across(rs: ResultSet, peptidoform: str, charge: int) -> PrecursorAcross:
     scored = sql_path(rs.scored.require())
     head = rs.duck.df(
@@ -355,6 +369,8 @@ def _build_across(rs: ResultSet, peptidoform: str, charge: int) -> PrecursorAcro
         ):
             rec[k] = row.get(k)
         cid = int(row["candidate_id"])
+        if run.has_im:
+            rec["apex_im"] = _apex_im(rs, run, cid, row.get("selected_peak_rank"))
         try:
             qs = quant_states(rs, run, [cid]).iloc[0]
             rec.update(

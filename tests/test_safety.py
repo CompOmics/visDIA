@@ -166,7 +166,7 @@ def test_report_only_versions_of_experiment_runs_are_checked(fixture_dir, tmp_pa
         features.require()
 
 
-def test_unrecorded_spectra_with_ion_mobility_are_refused(fixture_dir, tmp_path):
+def test_unrecorded_spectra_with_ion_mobility_are_read_as_diapasef(fixture_dir, tmp_path):
     exp = _copy(fixture_dir("experiment"), tmp_path / "exp")
     ms1 = exp / "a" / "spectra" / "spectra_ms1.parquet"
     table = pq.read_table(ms1)
@@ -177,9 +177,8 @@ def test_unrecorded_spectra_with_ion_mobility_are_refused(fixture_dir, tmp_path)
     (exp / "a" / "spectra" / "spectra_ms1.parquet.report.json").unlink()
     rs = open_results(exp)
     art = rs.run("a").artifact("spectra_ms1")
-    assert art.version.source == "inferred" and art.version.version == 3
-    with pytest.raises(SchemaVersionError, match="ion-mobility"):
-        art.require()
+    assert art.version.source == "inferred" and art.version.version == 2
+    assert art.usable
 
 
 # --------------------------------------------------------------------------- MBR

@@ -1103,6 +1103,22 @@ def rt_card(d: PrecursorDetail, xr: dict[str, Any], pct: dict[str, FeaturePercen
     )
 
 
+def im_trace_card(ctx: PageContext, d: PrecursorDetail, frags: list[view.Fragment]) -> Any:
+    """The 1/K0 of the fragment traces over RT; None on a run without 1/K0 chromatograms."""
+    fig = dfig.im_trace_figure(d, frags, ctx.scheme)
+    if fig is None:
+        return None
+    return card(
+        "1/K0 along the trace",
+        graph("pd-im-trace", fig),
+        subtitle=(
+            "The intensity-weighted 1/K0 of each fragment point, against the 1/K0 window and "
+            "the calibrated prediction. Not a mobilogram: MuMDIA stores one 1/K0 per point."
+        ),
+        id="pd-im-card",
+    )
+
+
 # --------------------------------------------------------------------------- mirror
 
 
@@ -1673,6 +1689,17 @@ def evidence_grid(d: PrecursorDetail, pct: dict[str, FeaturePercentile]) -> Any:
         ),
         quant_card(d),
     ]
+    if g.get("im"):
+        cards.insert(
+            4,
+            _ev_card(
+                "Ion mobility",
+                g["im"],
+                pct,
+                id_="pd-ev-im",
+                subtitle="The apex 1/K0 against the calibrated prediction and the 1/K0 window",
+            ),
+        )
     return dmc.Stack(
         [
             evidence_legend(),

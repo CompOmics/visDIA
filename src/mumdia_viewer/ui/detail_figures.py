@@ -492,6 +492,111 @@ def xic_figure(
     return fig
 
 
+def im_trace_figure(
+    d: PrecursorDetail, frags: Sequence[Fragment], scheme: str = "light"
+) -> go.Figure | None:
+    """The 1/K0 of each fragment trace point over RT (diaPASEF chromatograms v3/v4).
+
+    One point per scan with signal, sized by intensity, against the 1/K0 window (grey
+    band), the calibrated prediction (dotted line) and the apex 1/K0 (green). This is the
+    intensity-weighted 1/K0 the engine stored per point, not a mobilogram: MuMDIA keeps no
+    1/K0 profile. None when the chromatogram has no 1/K0.
+    """
+    chrom = d.chromatogram
+    if chrom is None:
+        return None
+    traces = chrom.fragments()
+    if not any(t.im is not None for t in traces):
+        return None
+    fig = go.Figure()
+    ymax = max((float(np.max(t.intensity)) for t in traces if t.intensity.size), default=0.0)
+    for f in frags:
+        t = traces[f.index]
+        if not f.observed or t.im is None:
+            continue
+        keep = (t.im > 0) & (t.intensity > 0)
+        if not keep.any():
+            continue
+        inten = np.asarray(t.intensity[keep], dtype=np.float64)
+        fig.add_trace(
+            go.Scatter(
+                x=_r(t.rt[keep], 3),
+                y=_r(t.im[keep], 4),
+                mode="markers",
+                name=f.html,
+                legendgroup=f"f{f.index}",
+                marker=dict(
+                    color=f.colour,
+                    size=4 + 10 * np.sqrt(inten / ymax) if ymax > 0 else 6,
+                    line=dict(width=0),
+                ),
+                customdata=_r(inten, 1),
+                hovertemplate=(
+                    f"<b>{f.html}</b><br>RT %{{x:.2f}} s<br>1/K0 %{{y:.4f}}<br>"
+                    "intensity %{customdata:,.0f}<extra></extra>"
+                ),
+            )
+        )
+    w = d.window
+    shapes = []
+    if w is not None and w.im_lo is not None and w.im_hi is not None:
+        shapes.append(
+            dict(
+                type="rect",
+                xref="x domain",
+                x0=0,
+                x1=1,
+                y0=w.im_lo,
+                y1=w.im_hi,
+                fillcolor=theme.PREDICTION,
+                opacity=0.12,
+                line=dict(width=0),
+                layer="below",
+            )
+        )
+    if w is not None and w.im_pred_cal is not None:
+        shapes.append(
+            dict(
+                type="line",
+                xref="x domain",
+                x0=0,
+                x1=1,
+                y0=w.im_pred_cal,
+                y1=w.im_pred_cal,
+                line=dict(color=theme.PREDICTION, dash="dot", width=1.5),
+            )
+        )
+    peak = d.selected_peak or {}
+    apex_rt, apex_im = peak.get("apex_rt"), peak.get("apex_im")
+    if apex_rt is not None and apex_im is not None and np.isfinite(apex_im):
+        fig.add_trace(
+            go.Scatter(
+                x=[apex_rt],
+                y=[apex_im],
+                mode="markers",
+                name="apex 1/K0",
+                marker=dict(symbol="x", size=12, color=theme.TARGET, line=dict(width=2)),
+                hovertemplate="apex_im %{y:.4f} at %{x:.2f} s<extra></extra>",
+            )
+        )
+    for sh in shapes:
+        fig.add_shape(**sh)
+    xr = x_range(d, None)
+    return figures.themed(
+        fig,
+        scheme,
+        height=300,
+        hovermode="closest",
+        margin=dict(XIC_MARGIN),
+        modebar=MODEBAR,
+        legend=dict(orientation="h", yanchor="bottom", y=1.01, x=0, font=dict(size=11)),
+        xaxis=dict(
+            title="retention time (s)", **({"range": xr["range"]} if xr.get("range") else {})
+        ),
+        yaxis=dict(title="1/K0 (V s cm\u207b\u00b2)", tickformat=".3f"),
+    )
+
+
 def _peak_height(traces: Sequence[Any], rng: Sequence[float] | None) -> float:
     """The highest intensity of ``traces`` inside the RT range ``rng`` (all of it for None).
 

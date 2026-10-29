@@ -40,6 +40,8 @@ TIC_FILL = "rgba(134, 142, 150, 0.14)"
 ISOTOPE = theme.MS1[0]
 LABEL_FONT = 10
 ISOTOPE_NAMES = {-1: "M-1", 0: "M", 1: "M+1", 2: "M+2"}
+IM_SCALE = "Viridis"
+IM_MAP_HEIGHT = 300
 
 
 def _r(values: Any, digits: int) -> np.ndarray:
@@ -94,8 +96,12 @@ def spectrum_figure(
     precursor_mz: float | None = None,
     candidate: int | None = None,
     why_empty: str = "No scan to show.",
+    im_range: tuple[float, float] | None = None,
 ) -> go.Figure:
     """One scan as a stick plot; see the module docstring.
+
+    On a diaPASEF scan (``spec.im``) the peak tops are dots coloured by their 1/K0 on
+    the fixed scale ``im_range`` (the run's 1/K0 extent), so colours compare across scans.
 
     ``frags`` are the precursor page's fragments (:func:`.detail_view.fragments_of`):
     their colours and names. ``scale="matched"`` draws the observed peaks in % of the
@@ -109,7 +115,10 @@ def spectrum_figure(
     mz = np.asarray(spec.mz, dtype=np.float64)
     inten = np.asarray(spec.intensity, dtype=np.float64)
     if mz.size == 0:
-        return empty_figure("This scan has no peaks.", scheme, height=SPECTRUM_HEIGHT)
+        why = (
+            "No peak passes the 1/K0 filter." if spec.im is not None else "This scan has no peaks."
+        )
+        return empty_figure(why, scheme, height=SPECTRUM_HEIGHT)
     by_index = {f.index: f for f in frags}
     matches = [
         m for m in (overlay.matches if overlay is not None else []) if m.fragment in by_index
@@ -166,17 +175,33 @@ def spectrum_figure(
             meta={"kind": "stems"},
         )
     )
+    tops: dict[str, Any] = dict(size=5, color=colour, opacity=0)
+    im_hover = ""
+    custom = [_r(inten, 0), _r(rel, 2)]
+    if spec.im is not None:
+        lo_im, hi_im = im_range or (float(spec.im.min()), float(spec.im.max()))
+        tops = dict(
+            size=4,
+            color=_r(spec.im, 4),
+            colorscale=IM_SCALE,
+            cmin=lo_im,
+            cmax=hi_im,
+            opacity=0.9,
+            colorbar=dict(title=dict(text="1/K0", side="right"), thickness=8, len=0.6, x=1.0),
+        )
+        custom.append(_r(spec.im, 4))
+        im_hover = "<br>1/K0 %{customdata[2]:.4f}"
     fig.add_trace(
         # Plain lists (not typed arrays): spectra.js reads them to relabel after a zoom.
         go.Scattergl(
             x=_r(mz, 4).tolist(),
             y=_r(shown, 2).tolist(),
-            customdata=np.column_stack([_r(inten, 0), _r(rel, 2)]).tolist(),
+            customdata=np.column_stack(custom).tolist(),
             mode="markers",
-            marker=dict(size=5, color=colour, opacity=0),
+            marker=tops,
             hovertemplate=(
                 "m/z %{x:.4f}<br>intensity %{customdata[0]:,.0f}"
-                f"<br>%{{customdata[1]:.1f}}% of {what}<extra></extra>"
+                f"<br>%{{customdata[1]:.1f}}% of {what}{im_hover}<extra></extra>"
             ),
             showlegend=False,
             name="peak tops",
@@ -593,4 +618,125 @@ def nav_figure(
             tickfont=dict(size=9),
             nticks=3,
         ),
+    )
+
+
+def im_map_figure(
+    full: Spectrum | None,
+    spec: Spectrum | None,
+    scheme: str = "light",
+    *,
+    im_range: tuple[float, float] | None = None,
+    keep: tuple[float, float] | None = None,
+    window: tuple[float, float, float | None] | None = None,
+    overlay: FragmentOverlay | None = None,
+    frags: Sequence[Any] = (),
+) -> go.Figure:
+    """A diaPASEF scan's peaks in m/z x 1/K0, sized by intensity.
+
+    ``full`` is the scan, ``spec`` the peaks the 1/K0 filter ``keep`` left (coloured on
+    the scale ``im_range``; the others grey). The orange rectangle is the MS2 slot's m/z x
+    1/K0 isolation window; ``window`` = (im_lo, im_hi, im_pred_cal) of the selected
+    candidate (dashed, and dotted at the prediction). The candidate's matched fragments
+    (``overlay``, matched on ``spec``) are ringed in their colours.
+    """
+    if full is None or full.im is None:
+        return empty_figure("This scan has no 1/K0 per peak.", scheme, height=IM_MAP_HEIGHT)
+    if full.n_peaks == 0:
+        return empty_figure("This scan has no peaks.", scheme, height=IM_MAP_HEIGHT)
+    mz = np.asarray(full.mz, dtype=np.float64)
+    im = np.asarray(full.im, dtype=np.float64)
+    inten = np.asarray(full.intensity, dtype=np.float64)
+    size = 3.0 + 11.0 * np.sqrt(inten / max(float(inten.max()), 1.0))
+    lo_im, hi_im = im_range or (float(im.min()), float(im.max()))
+    inside = np.ones(mz.size, dtype=bool) if keep is None else (im >= keep[0]) & (im <= keep[1])
+    fig = go.Figure()
+    hover = "m/z %{x:.4f}<br>1/K0 %{y:.4f}<br>intensity %{customdata:,.0f}"
+    for mask, marker, name in (
+        (~inside, dict(color=OBSERVED), "filtered out"),
+        (
+            inside,
+            dict(color=_r(im[inside], 4), colorscale=IM_SCALE, cmin=lo_im, cmax=hi_im),
+            "kept",
+        ),
+    ):
+        if not mask.any():
+            continue
+        fig.add_trace(
+            go.Scattergl(
+                x=_r(mz[mask], 4),
+                y=_r(im[mask], 4),
+                customdata=_r(inten[mask], 0),
+                mode="markers",
+                marker=dict(size=_r(size[mask], 1), opacity=0.75, line=dict(width=0), **marker),
+                name=name,
+                meta={"kind": name},
+                hovertemplate=hover + f"<extra>{name}</extra>",
+            )
+        )
+    if overlay is not None and spec is not None and spec.im is not None:
+        by_index = {f.index: f for f in frags}
+        for m in overlay.matches:
+            f = by_index.get(m.fragment)
+            if f is None or m.peak >= spec.n_peaks:
+                continue
+            y = float(spec.im[m.peak])
+            fig.add_trace(
+                go.Scatter(
+                    x=[m.obs_mz],
+                    y=[y],
+                    mode="markers",
+                    marker=dict(size=13, color="rgba(0,0,0,0)", line=dict(color=f.colour, width=2)),
+                    name=f.text,
+                    meta={"kind": "matched", "frag": f.index},
+                    hovertemplate=f"<b>{f.html}</b> matched<br>m/z {m.obs_mz:.4f}<br>"
+                    f"1/K0 {y:.4f}<extra></extra>",
+                )
+            )
+    shapes: list[dict[str, Any]] = []
+    if (
+        full.level == 2
+        and full.window_lower is not None
+        and full.window_im_lower is not None
+        and full.window_im_upper is not None
+    ):
+        shapes.append(
+            dict(
+                type="rect",
+                x0=float(full.window_lower),
+                x1=float(full.window_upper),
+                y0=full.window_im_lower,
+                y1=full.window_im_upper,
+                fillcolor=WINDOW_FILL,
+                line=dict(color=SCAN_LINE, width=1),
+                layer="below",
+            )
+        )
+    if window is not None:
+        w_lo, w_hi, pred = window
+        for y, dash in ((w_lo, "dash"), (w_hi, "dash"), (pred, "dot")):
+            if y is not None and np.isfinite(y):
+                shapes.append(
+                    dict(
+                        type="line",
+                        xref="paper",
+                        x0=0,
+                        x1=1,
+                        y0=y,
+                        y1=y,
+                        line=dict(color=theme.INTEGRATION, width=1.2, dash=dash),
+                    )
+                )
+    pad = max(1.0, 0.02 * float(mz.max() - mz.min()))
+    return themed(
+        fig,
+        scheme,
+        height=IM_MAP_HEIGHT,
+        hovermode="closest",
+        showlegend=False,
+        uirevision=f"sp-im-{full.level}",
+        margin=dict(l=56, r=36, t=12, b=42),
+        shapes=shapes,
+        xaxis=dict(title="m/z", range=[float(mz.min()) - pad, float(mz.max()) + pad]),
+        yaxis=dict(title="1/K0 (V s cm^-2)", range=[lo_im, hi_im]),
     )

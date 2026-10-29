@@ -72,6 +72,8 @@ CONTEXT_COLUMNS: tuple[str, ...] = (
     "n_matched_y",
     "predicted_rt_raw",
     "has_ms1",
+    "im_error",
+    "has_ms1_im",
 )
 
 _SQL_WORDS = frozenset({"and", "or", "not", "is", "null", "true", "false", "in", "between"})
@@ -155,6 +157,10 @@ _RT_NOTE = (
     "truncated at the window."
 )
 _RT_FINITE = "isfinite(rt_pred_cal)"
+_IM_NOTE = (
+    "The engine writes 0 when apex_im or im_pred_cal is missing (no 1/K0 at the apex, or no "
+    "1/K0 calibration); such rows fail the validity rule."
+)
 _CONTESTED_NOTE = (
     "Computed only on the two-pass extraction path: extract.peak_claim = coelution_* or "
     "extract.emit_contested_features = true. Otherwise the engine writes 0 on every row, which "
@@ -415,6 +421,92 @@ _EVIDENCE: tuple[FeatureInfo, ...] = (
         _RT_NOTE,
         higher_is_better=False,
         extracted_validity=_RT_FINITE,
+    ),
+    FeatureInfo(
+        "im_error",
+        "1/K0 error (apex - predicted)",
+        "1/K0",
+        "apex_im - im_pred_cal in V s cm^-2; positive when the precursor's apex 1/K0 is above "
+        "the calibrated prediction. Ion-mobility family (diaPASEF runs, features.im_features).",
+        "im_error <> 0",
+        _IM_NOTE,
+    ),
+    FeatureInfo(
+        "im_error_abs",
+        "|1/K0 error|",
+        "1/K0",
+        "|apex_im - im_pred_cal| in V s cm^-2.",
+        "im_error_abs <> 0",
+        _IM_NOTE,
+        higher_is_better=False,
+    ),
+    FeatureInfo(
+        "im_frag_mad",
+        "Fragment 1/K0 spread at the apex",
+        "1/K0",
+        "The matched fragments' intensity-weighted mean absolute deviation from apex_im in the "
+        "apex scan (psms_extracted apex_im_mad).",
+        "im_error <> 0",
+        "Ranked where the apex has a 1/K0 (im_error <> 0); a real 0 occurs with one matched "
+        "fragment.",
+        higher_is_better=False,
+    ),
+    FeatureInfo(
+        "ms1_im_error_abs",
+        "|MS1 1/K0 error|",
+        "1/K0",
+        "|ms1_apex_im - im_pred_cal|: the MS1 precursor peak's 1/K0 against the calibrated "
+        "prediction.",
+        "has_ms1_im = 1",
+        "0 when no MS1 precursor peak with a 1/K0 was found (has_ms1_im = 0).",
+        higher_is_better=False,
+    ),
+    FeatureInfo(
+        "ms1_frag_im_diff",
+        "|MS1 - fragment 1/K0|",
+        "1/K0",
+        "|ms1_apex_im - apex_im|: the MS1 precursor peak's 1/K0 against the fragments' apex 1/K0.",
+        "has_ms1_im = 1",
+        "0 when no MS1 precursor peak with a 1/K0 was found (has_ms1_im = 0).",
+        higher_is_better=False,
+    ),
+    FeatureInfo(
+        "has_ms1_im",
+        "MS1 peak with 1/K0 found",
+        "flag",
+        "1 when the MS1 precursor peak at the apex has a 1/K0 (ms1_apex_im present).",
+        None,
+        "A flag has no percentile.",
+        percentile=False,
+    ),
+    FeatureInfo(
+        "im_elution_error_abs",
+        "|1/K0 error| over the elution peak",
+        "1/K0",
+        "|intensity-weighted mean 1/K0 of the fragment points over the elution peak - "
+        "im_pred_cal|, skipping points without intensity or 1/K0.",
+        "im_elution_error_abs <> 0",
+        "0 without per-point 1/K0 (chromatograms v3/v4) or without a 1/K0 calibration.",
+        higher_is_better=False,
+    ),
+    FeatureInfo(
+        "im_elution_sd",
+        "1/K0 SD over the elution peak",
+        "1/K0",
+        "The intensity-weighted SD of the 1/K0 of every fragment point over the elution peak.",
+        "im_elution_sd > 0",
+        "0 without per-point 1/K0, and a real 0 with a single weighted point.",
+        higher_is_better=False,
+    ),
+    FeatureInfo(
+        "im_elution_frag_sd",
+        "Between-fragment 1/K0 SD over the elution peak",
+        "1/K0",
+        "The SD of each fragment's mean 1/K0 over the elution peak, weighted by its summed "
+        "intensity: how well the fragments agree in mobility.",
+        "im_elution_frag_sd > 0",
+        "0 with fewer than two fragments carrying 1/K0, or without per-point 1/K0.",
+        higher_is_better=False,
     ),
     FeatureInfo(
         "rt_error_over_peak_width",

@@ -39,6 +39,7 @@ from mumdia_viewer.data.detail import MirrorData
 from mumdia_viewer.data.discovery import Run
 from mumdia_viewer.data.errors import ViewerError
 from mumdia_viewer.data.spectra import Ms1Table, ScanTable, Spectrum
+from mumdia_viewer.data.windows import rt_window
 
 from . import spectra_cards as cards
 from . import spectra_figures as sf
@@ -49,6 +50,7 @@ from .widgets import empty, section
 
 SPEC_FIG = {"type": "fig", "name": cards.SPECTRUM_GRAPH}
 NAV_FIG = {"type": "fig", "name": cards.NAV_GRAPH}
+IM_FIG = {"type": "fig", "name": cards.IM_GRAPH}
 # Fragment matches are computed for at most this many listed candidates (the column says
 # so beyond it).
 MATCH_LIMIT = 80
@@ -155,6 +157,37 @@ def rt_max_of(rs: ResultSet, run: Run) -> float:
     return rs.memo(("spectra.page.rt_max", run.index, run.name), make)
 
 
+def im_bounds(rs: ResultSet, run: Run) -> tuple[float, float]:
+    """The 1/K0 extent of a diaPASEF run's isolation windows, padded and rounded to 0.01:
+    the fixed scale of the peak colours, the peak map and the 1/K0 slider."""
+
+    def make() -> tuple[float, float]:
+        w = ScanTable.for_run(rs, run).scheme() if run.has("spectra_ms2") else None
+        if w is None or "im_lower" not in w or not np.isfinite(w["im_lower"]).any():
+            return (0.6, 1.6)
+        lo, hi = float(np.nanmin(w["im_lower"])), float(np.nanmax(w["im_upper"]))
+        return (math.floor((lo - 0.05) * 100) / 100, math.ceil((hi + 0.05) * 100) / 100)
+
+    return rs.memo(("spectra", "im_bounds", run.index), make)
+
+
+def im_keep(
+    mode: str, custom: Any, window: tuple[float, float, float | None] | None
+) -> tuple[tuple[float, float] | None, str]:
+    """The 1/K0 range the filter keeps (None: every peak) and a sentence saying so."""
+    if mode == "cand":
+        if window is None or window[0] is None or window[1] is None:
+            return None, "No candidate 1/K0 window: every peak is shown."
+        return (window[0], window[1]), (
+            f"Peaks with 1/K0 in the candidate's window {window[0]:.3f} to {window[1]:.3f} "
+            "(run_windows im_lo, im_hi); the spectrum and its matches use these alone."
+        )
+    if mode == "slider" and isinstance(custom, list | tuple) and len(custom) == 2:
+        lo, hi = float(custom[0]), float(custom[1])
+        return (lo, hi), f"Peaks with 1/K0 from {lo:.2f} to {hi:.2f} (slider)."
+    return None, "Every peak of the scan."
+
+
 def nav_edges(rt_max: float) -> np.ndarray:
     """RT bins of the strip: about 160 bins of a round width (1, 2, 5, 10, 20 or 30 s)."""
     raw = rt_max / 160.0
@@ -219,13 +252,21 @@ def view(
     scheme: str,
     base: str = "/",
     window_hint: int | None = None,
+    im_mode: str = "cand",
+    im_custom: Any = None,
 ) -> dict[str, Any]:
-    """Every part of the page that depends on the scan, the list settings and the candidate."""
+    """Every part of the page that depends on the scan, the list settings and the candidate.
+
+    On a diaPASEF scan the 1/K0 filter (``im_mode``: ``all``, ``cand`` for the selected
+    candidate's 1/K0 window, ``slider`` for ``im_custom``) applies before the overlays,
+    so the spectrum, the matches and the ladder use the kept peaks only; the facts and
+    the details describe the whole scan.
+    """
     timings: dict[str, float] = {}
     tick = time.perf_counter()
-    spec = _spectrum(rs, run, ref)
+    full = spec = _spectrum(rs, run, ref)
     timings["spectrum"] = (time.perf_counter() - tick) * 1000.0
-    tic = float(np.sum(spec.intensity.astype(np.float64))) if spec.n_peaks else 0.0
+    tic = float(np.sum(full.intensity.astype(np.float64))) if full.n_peaks else 0.0
     mode, delta = cards.parse_near(near)
 
     tick = time.perf_counter()
@@ -245,6 +286,22 @@ def view(
         selected = None
     sel_cid = int(selected["candidate_id"]) if selected is not None else None
 
+    im_window = None
+    keep, im_note = None, ""
+    if full.im is not None:
+        if sel_cid is not None:
+            try:
+                w = rt_window(rs, run, sel_cid)
+            except ViewerError:
+                w = None
+            if w is not None and w.im_lo is not None:
+                im_window = (w.im_lo, w.im_hi, w.im_pred_cal)
+        keep, im_note = im_keep(im_mode, im_custom, im_window)
+        if keep is not None:
+            spec = full.im_slice(*keep)
+            im_note += f" {spec.n_peaks:,} of {full.n_peaks:,} peaks kept."
+    im_range = im_bounds(rs, run) if full.im is not None else None
+
     counts: dict[int, tuple[int, int]] = {}
     overlay = None
     isotopes = None
@@ -252,7 +309,7 @@ def view(
     tick = time.perf_counter()
     if df is not None and ref.level == 2 and len(df):
         try:
-            counts = sc.matched_counts(rs, run, df["candidate_id"].head(MATCH_LIMIT), spec)
+            counts = sc.matched_counts(rs, run, df["candidate_id"].head(MATCH_LIMIT), full)
         except ViewerError:
             counts = {}
     if selected is not None:
@@ -279,6 +336,21 @@ def view(
         scale=scale,
         precursor_mz=float(selected["precursor_mz"]) if selected is not None else None,
         candidate=sel_cid,
+        im_range=im_range,
+    )
+    im_fig = (
+        sf.im_map_figure(
+            full,
+            spec,
+            scheme,
+            im_range=im_range,
+            keep=keep,
+            window=im_window,
+            overlay=overlay,
+            frags=frags,
+        )
+        if full.im is not None
+        else None
     )
 
     # The sequence diagram above the spectrum and the ladder (MS2), or the isotopes (MS1).
@@ -359,13 +431,15 @@ def view(
         note = [*note, html.Span(f" Fragments are matched for the first {MATCH_LIMIT}.")]
     lo, hi, _ = score_range(rs)
     return {
-        "spec": spec,
+        "spec": full,
         "ref": ref,
         "title": cards.scan_title(ref),
-        "sub": cards.sub_line(spec, ref),
-        "facts": cards.facts(spec, ref, tic),
+        "sub": cards.sub_line(full, ref),
+        "facts": cards.facts(full, ref, tic),
         "fig": fig,
-        "spec_title": cards.spectrum_title(ref, spec),
+        "im_fig": im_fig,
+        "im_note": im_note,
+        "spec_title": cards.spectrum_title(ref, full),
         "seq": seq,
         "foot": foot,
         "rows": rows,
@@ -376,7 +450,7 @@ def view(
         "nav_note": nav_note,
         "frag_title": cards.candidate_header(selected, ref),
         "frag_body": frag_body,
-        "details": cards.details_body(spec, ref, links, ms2_here=ms2_here),
+        "details": cards.details_body(full, ref, links, ms2_here=ms2_here),
         "cid": sel_cid,
         "scroll": {"rowId": str(sel_cid), "rowPosition": "middle"} if sel_cid is not None else None,
         "timings": timings,
@@ -444,7 +518,15 @@ def layout(ctx: PageContext) -> Any:
     hero = cards.header(rs, run.name, run.label, ref, v["sub"])
     # The facts are the hero's right side; fill them in place.
     hero.children[1].children = v["facts"]
-    spec_card = cards.spectrum_card(v["fig"], v["spec_title"], v["seq"], v["foot"])
+    spec_card = cards.spectrum_card(
+        v["fig"],
+        v["spec_title"],
+        v["seq"],
+        v["foot"],
+        im=cards.im_block(v["im_fig"], v["im_note"], im_bounds(rs, run), scheme)
+        if v["im_fig"] is not None
+        else cards.im_block(None, "", (0.0, 1.0), scheme),
+    )
     cand_card = cards.candidates_card(
         base=ctx.base,
         run_name=run.name,
@@ -694,6 +776,8 @@ def register(app, get_rs, base: str) -> None:
         Output("sp-cid", "data"),
         Output("sp-timings", "children"),
         Output(cards.GRID_ID, "scrollTo"),
+        Output(IM_FIG, "figure", allow_duplicate=True),
+        Output("sp-im-note", "children"),
         Input("sp-scan", "data"),
         Input("threshold", "data"),
         Input("sp-near", "value"),
@@ -701,12 +785,14 @@ def register(app, get_rs, base: str) -> None:
         Input("sp-cid", "data"),
         Input("sp-labels", "value"),
         Input("sp-scale", "value"),
+        Input("sp-im-mode", "value"),
+        Input("sp-im-range", "value"),
         State("sp-key", "data"),
         State("scheme", "data"),
         prevent_initial_call=True,
     )
-    def _show(scan, t, near, decoys, cid, labels, scale, key, scheme):
-        nothing = (no_update,) * 19
+    def _show(scan, t, near, decoys, cid, labels, scale, im_mode, im_range, key, scheme):
+        nothing = (no_update,) * 21
         run = _run(key)
         if run is None:
             return nothing
@@ -728,6 +814,8 @@ def register(app, get_rs, base: str) -> None:
             scheme=_scheme(scheme),
             base=str(key.get("base") or base),
             window_hint=_int((scan or {}).get("window")),
+            im_mode=im_mode or "cand",
+            im_custom=im_range,
         )
         ms = (time.perf_counter() - t0) * 1000.0
         parts = [f"Updated in {ms:,.0f} ms"] + [
@@ -759,4 +847,6 @@ def register(app, get_rs, base: str) -> None:
             v["cid"] if v["cid"] != _int(cid) else no_update,
             "; ".join(parts) + ".",
             v["scroll"] if v["scroll"] is not None else no_update,
+            v["im_fig"] if v["im_fig"] is not None else no_update,
+            v["im_note"],
         )

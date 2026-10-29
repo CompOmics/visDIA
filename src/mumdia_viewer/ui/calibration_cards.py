@@ -1053,6 +1053,79 @@ def model_card(model: RtModel) -> Any:
     )
 
 
+def im_card(cal: CalRecord | None) -> Any:
+    """The ion-mobility calibration of ``cal.json`` (diaPASEF only); None on 3D runs."""
+    if cal is None or not cal.has_im:
+        return None
+
+    def k(v: Any) -> str:
+        return f"{v:.4f} 1/K0" if v is not None else "n/a"
+
+    rows: list[Any] = [
+        _kv_row(
+            "method",
+            str(cal.im_method).replace("_", " "),
+            "cal.json im_method: per_charge_linear_ccs fits observed against predicted CCS "
+            "per charge, then converts back to 1/K0 (rt_im_train.rs)",
+        ),
+        _kv_row(
+            "half-window w_im",
+            f"± {k(cal.w_im)}",
+            "cal.json w_im: every candidate's 1/K0 window is im_pred_cal ± w_im",
+        ),
+        _kv_row(
+            "|residual| median",
+            k(cal.im_in_sample_resid_abs_median),
+            "cal.json im_in_sample_resid_abs_median: on the anchors the fit saw",
+        ),
+        _kv_row(
+            "held-out |residual|",
+            k(cal.im_holdout_resid_abs_median),
+            "cal.json im_holdout_resid_abs_median: on anchors held out of the fit",
+        ),
+    ]
+    for z, fit in sorted(cal.im_per_charge.items(), key=lambda kv: str(kv[0])):
+        if not isinstance(fit, dict):
+            continue
+        a, b = num(fit.get("a")), num(fit.get("b"))
+        line = f"a {a:.4g}, b {b:.4g}" if a is not None and b is not None else "n/a"
+        rows.append(
+            _kv_row(
+                f"charge {z}",
+                f"{line} ({count(fit.get('n'))} anchors)",
+                "cal.json im_per_charge: the linear CCS fit of this charge",
+            )
+        )
+    return section(
+        "Ion mobility",
+        html.Div(rows, className="cal-kv-list"),
+        help="The 1/K0 calibration of a diaPASEF run: the library's predicted 1/K0, "
+        "corrected per charge on this run's anchors, centres each candidate's 1/K0 window.",
+        id="cal-im-card",
+    )
+
+
+def im_error_card(e: AcceptedErrors, cal: CalRecord | None, scheme: str) -> Any:
+    """The RT error card's 1/K0 counterpart (diaPASEF only); None on 3D runs."""
+    if cal is None or not cal.has_im:
+        return None
+    n = int(np.isfinite(e.frame["im_error"]).sum()) if "im_error" in e.frame else 0
+    return section(
+        title(
+            "1/K0 error",
+            count=f"{n:,}",
+            count_id="cal-im-err-count",
+            help_text="The feature im_error of the accepted identifications (same rows and "
+            "threshold as the RT error card) against apex_rt. Lines: 0, the 1/K0 window edges "
+            "±w_im of cal.json, and the 5th, 50th and 95th percentiles in bins of apex RT "
+            "(viewer-derived).",
+        ),
+        graph("cal-im-err", cfig.im_error_figure(e, cal.w_im, scheme)),
+        subtitle="Accepted identifications: apex_im - im_pred_cal across the gradient",
+        id="cal-im-err-card",
+    )
+
+
 def masscal_card(
     m: MassCalRecord | None,
     mz_range: tuple[float, float, str] | None,

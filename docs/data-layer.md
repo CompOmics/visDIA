@@ -84,17 +84,23 @@ its report but not the manifest); the disagreement is reported, and the file is 
 when either version is unsupported. The few files the engine writes with neither record
 (the per-run LFQ siblings, the multi-head library table, the MBR transfer table) get a
 version inferred from their columns, labelled as inferred; an ion-mobility column in a
-schema whose released versions have none infers the unreleased ion-mobility version.
+schema whose 3D versions have none infers the diaPASEF version.
 
 | schema | versions read | notes |
 |---|---|---|
 | `psms_scored` | 4; 3 (pre-release builds, no `selected_peak_rank`) | |
 | `psms_competed` | 3, 4; 2 (pre-release) | |
 | `features` | 1 (float64), 2 (float32) | |
-| `psms_extracted` | 2; 1 (pre-release) | |
-| `chromatograms` | 1, 2 | 3 and 4 (ion mobility, PR #140) need `allow_unreleased=True` |
+| `psms_extracted` | 2; 1 (pre-release); 4 (diaPASEF) | |
+| `chromatograms` | 1, 2; 3, 4 (diaPASEF: per-point 1/K0) | 3/4 only when `features.im_features` or retrace is on |
+| `spectra_ms1`, `spectra_ms2`, `isolation_windows`, `fragment_library_precursors`, `seed_psms` | 1; 2 (diaPASEF) | |
 | `peptide_quant`, `protein_group_quant` | 2 | |
-| every other artifact | 1 | the ion-mobility branch raises spectra, windows, seeds and the library precursors; opt-in only |
+| every other artifact | 1 | |
+
+The diaPASEF versions are what MuMDIA ≥0.7 writes for a native Bruker `.d` (timsrust) and
+are read by default (`schemas.DIAPASEF`). Versions written only by the old ion-mobility
+engine branch (spectra v3, `psms_extracted` v3 and v5) are refused unless
+`allow_unreleased=True`.
 
 ## Cache
 

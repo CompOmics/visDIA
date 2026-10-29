@@ -613,6 +613,8 @@ def format_value(value: Any, unit: str = "", key: str = "") -> str:
         return f"{v:,.0f}"
     if u == "s":
         return f"{v:+.2f}" if key == "rt_error" else f"{v:.2f}"
+    if u == "1/K0":
+        return f"{v:+.4f}" if key == "im_error" else f"{v:.4f}"
     if u.startswith("ppm"):
         return (
             f"{v:+.2f}"
