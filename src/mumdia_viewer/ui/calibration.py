@@ -29,6 +29,7 @@ import time
 from typing import Any
 
 import dash_mantine_components as dmc
+import numpy as np
 from dash import ClientsideFunction, Input, Output, State, ctx, dcc, no_update
 
 from mumdia_viewer.data import ResultSet, ViewerError
@@ -149,9 +150,33 @@ def layout(ctx: PageContext) -> Any:
         ),
         dmc.Grid(
             [
-                dmc.GridCol(cards.error_card(errors, scheme), span={"base": 12, "lg": 8}),
                 dmc.GridCol(
-                    dmc.Stack([cards.funnel_card(anchors), cards.model_card(model)], gap="lg"),
+                    dmc.Stack(
+                        [
+                            c
+                            for c in (
+                                cards.error_card(errors, scheme),
+                                cards.im_error_card(errors, cal, scheme),
+                            )
+                            if c is not None
+                        ],
+                        gap="lg",
+                    ),
+                    span={"base": 12, "lg": 8},
+                ),
+                dmc.GridCol(
+                    dmc.Stack(
+                        [
+                            c
+                            for c in (
+                                cards.funnel_card(anchors),
+                                cards.model_card(model),
+                                cards.im_card(cal),
+                            )
+                            if c is not None
+                        ],
+                        gap="lg",
+                    ),
                     span={"base": 12, "lg": 4},
                 ),
             ],
@@ -425,6 +450,25 @@ def register(app, get_rs, base: str) -> None:
         if not key:
             return (no_update,) * 9
         return error_answer(get_rs(), key, t, view, scheme)
+
+    @app.callback(
+        Output("cal-im-err", "figure"),
+        Output("cal-im-err-count", "children"),
+        Input("threshold", "data"),
+        State("cal-key", "data"),
+        State("scheme", "data"),
+        prevent_initial_call=True,
+    )
+    def _im_errors(t, key, scheme):
+        if not key:
+            return no_update, no_update
+        rs = get_rs()
+        run, band = _run_of(rs, key)
+        e = data.accepted_errors(rs, run, parse_threshold(t), band)
+        cal = data.cal_record(rs, run, band)
+        n = int(np.isfinite(e.frame["im_error"]).sum()) if "im_error" in e.frame else 0
+        w = cal.w_im if cal is not None else None
+        return cfig.im_error_figure(e, w, _scheme(scheme)), f"{n:,}"
 
     @app.callback(
         Output(MASS, "figure", allow_duplicate=True),

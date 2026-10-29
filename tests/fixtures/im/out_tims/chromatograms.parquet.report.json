@@ -1,0 +1,64 @@
+{
+  "logical_name": "chromatograms",
+  "schema_name": "chromatograms",
+  "schema_version": 4,
+  "stage": "retrace",
+  "rows": 9226,
+  "content_hash": null,
+  "params": {
+    "apex_count_window": 5,
+    "effective_frag_tol_ppm": 16.581665129810666,
+    "frag_ppm_offset": -1.1761224559883217,
+    "frag_tol_ppm": 20.0,
+    "gate_coelution_min": 0.5,
+    "gate_min_score": 0.6,
+    "gate_mode": "window_mean",
+    "gate_support_min": 0.845,
+    "im_gate": true,
+    "instrument": {
+      "accession": "",
+      "astral_analyzer": false,
+      "name": "timsTOF SCP"
+    },
+    "presence_min_coelution": 2,
+    "presence_min_fragments": 3,
+    "reader": "timsrust",
+    "retrace": {
+      "apex_features": false,
+      "config_hash": "c7aaf772edb541c0f7a422185488525597df52cafd1253acc1a98106f3ed23c6",
+      "frag_tol_ppm": 16.581665129810666,
+      "im_half_width": 0.015,
+      "ms1": true,
+      "ms1_scan_halfwidth": 1,
+      "prec_tol_ppm": 3.0,
+      "raw": "/public/compomics2/Robbe/HYE_diaPASEF_mumdia/raw/ttSCP_diaPASEF_Condition_A_Sample_Alpha_01_11494.d",
+      "repick": true,
+      "trace_source": "raw_tdf"
+    },
+    "retrace_skeleton": {
+      "ms1": true,
+      "rows": 10451429
+    },
+    "scan_window": 2
+  },
+  "stats": {
+    "copied_rows": 258786,
+    "frames_decoded": 77178,
+    "ms1_mass_residual_ppm_median": 0.016854907630544876,
+    "ms1_mass_residual_rows": 650228,
+    "ms_read": 6925,
+    "ms_repick": 3172,
+    "ms_setup_and_decode": 13270,
+    "ms_sum": 11733,
+    "ms_window_frames": 2727,
+    "ms_write": 9174,
+    "raw_events_summed": 1005157105,
+    "readers": 8,
+    "rebuilt_fragment_rows": 8262899,
+    "rebuilt_ms1_rows": 2188530,
+    "rows": 10710215,
+    "unmatched_fragment_points": 0
+  },
+  "model_identity": null,
+  "elapsed_ms": 41915
+}

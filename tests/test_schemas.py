@@ -32,10 +32,21 @@ def test_unknown_future_version_is_refused_with_a_clear_message():
     assert "3, 4" in text and "newer MuMDIA" in text
 
 
-def test_ion_mobility_versions_need_opt_in():
+def test_diapasef_versions_are_read_by_default():
+    for name, version in [
+        ("chromatograms", 4),
+        ("spectra_ms2", 2),
+        ("psms_extracted", 4),
+        ("seed_psms", 2),
+        ("isolation_windows", 2),
+    ]:
+        check_version(name, version, where="x.parquet")
+
+
+def test_branch_only_ion_mobility_versions_need_opt_in():
     with pytest.raises(SchemaVersionError, match="PR #140"):
-        check_version("chromatograms", 4, where="c.parquet")
-    check_version("chromatograms", 4, where="c.parquet", allow_unreleased=True)
+        check_version("spectra_ms2", 3, where="s.parquet")
+    check_version("spectra_ms2", 3, where="s.parquet", allow_unreleased=True)
     assert 5 in supported_versions("psms_extracted", allow_unreleased=True)
     assert 5 not in supported_versions("psms_extracted")
 
@@ -135,6 +146,8 @@ def test_infer_version():
     assert infer_version("psms_scored", _schema("selected_peak_rank")) == 4
     assert infer_version("psms_scored", _schema("score")) == 3
     assert infer_version("psms_extracted", _schema("peak_rank")) == 2
+    assert infer_version("psms_extracted", _schema("peak_rank", "apex_im", "apex_im_mad")) == 4
+    assert infer_version("spectra_ms2", _schema("mz", "window_im_lower", "im")) == 2
     assert infer_version("chromatograms", _schema("rt", "intensity")) == 1
     assert (
         infer_version("lfq_maxlfq", _schema("protein_group", "run", "quantity", "n_features")) == 1

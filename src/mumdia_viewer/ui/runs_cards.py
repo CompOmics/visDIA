@@ -543,7 +543,17 @@ def run_table(
                     text=fmt_q(row["q_value"], t),
                     colour="var(--mantine-color-indigo-4)",
                 ),
-                f"{row['apex_rt']:.2f}" if _finite(row["apex_rt"]) is not None else "",
+                html.Div(
+                    [
+                        f"{row['apex_rt']:.2f}" if _finite(row["apex_rt"]) is not None else "",
+                        tip(
+                            html.Div(f"1/K0 {row['apex_im']:.4f}", className="xr-dim"),
+                            ROW_LABELS["apex_im"],
+                        )
+                        if _finite(row.get("apex_im")) is not None
+                        else None,
+                    ]
+                ),
                 html.Span(f"{err:+.2f}", className="xr-num") if err is not None else "",
                 (
                     f"{row['elution_lo']:.1f} to {row['elution_hi']:.1f}"

@@ -181,18 +181,18 @@ def test_unknown_scored_version_refuses_to_open(fixture_dir, tmp_path: Path):
         open_results(copy)
 
 
-def test_unreleased_chromatogram_version_is_refused_per_artifact(fixture_dir, tmp_path: Path):
+def test_unreleased_im_version_is_refused_per_artifact(fixture_dir, tmp_path: Path):
     copy = _copy(fixture_dir("single"), tmp_path / "run")
-    _edit_manifest(copy, "chromatograms", schema_version=4)
+    _edit_manifest(copy, "psms_extracted", schema_version=5)
     rs = open_results(copy)
-    chrom = rs.runs[0].artifact("chromatograms")
-    assert not chrom.usable and "unsupported_version" in rs.notice_codes()
+    extracted = rs.runs[0].artifact("psms_extracted")
+    assert not extracted.usable and "unsupported_version" in rs.notice_codes()
     with pytest.raises(SchemaVersionError, match="ion-mobility"):
-        chrom.require()
+        extracted.require()
     # With the opt-in the version passes the registry; the columns are still v2, so the
     # column contract refuses the mismatch when the table is read.
     rs2 = open_results(copy, allow_unreleased=True)
-    assert rs2.runs[0].artifact("chromatograms").error is None
+    assert rs2.runs[0].artifact("psms_extracted").error is None
 
 
 def test_hash_mismatch_between_manifest_and_report(fixture_dir, tmp_path: Path):

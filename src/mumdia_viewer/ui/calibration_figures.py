@@ -497,22 +497,80 @@ def error_figure(e: AcceptedErrors, scheme: str = "light", *, view: str = "secon
     """
     if e.error:
         return figures.empty_figure(f"Not available: {e.error}", scheme, height=HEIGHT)
+    edge = None
+    if view == "fraction":
+        edge = 1.0
+    else:
+        hw = e.frame["half_width"].to_numpy(dtype=np.float64) if len(e.frame) else np.zeros(0)
+        hw = hw[np.isfinite(hw)]
+        if hw.size and float(np.min(hw)) == float(np.max(hw)):
+            edge = float(hw[0])
+    fraction = view == "fraction"
+    return _gradient_error_figure(
+        e,
+        error_column(view),
+        edge,
+        scheme,
+        unit="of the half-window" if fraction else "s",
+        fmt=".3f" if fraction else "+.2f",
+        label="RT error",
+        y_title="rt_error_signed / half-window (viewer-derived)"
+        if fraction
+        else "rt_error_signed: apex - rt_pred_cal (s)",
+        invalid="No accepted row has a valid RT error (no RT calibration: the engine writes 0).",
+        uirevision="cal-error",
+        meta={"view": view},
+    )
+
+
+def im_error_figure(e: AcceptedErrors, w_im: float | None, scheme: str = "light") -> go.Figure:
+    """The 1/K0 error of the accepted identifications across the gradient (diaPASEF).
+
+    The RT error figure with y the feature ``im_error`` (``apex_im - im_pred_cal``) and
+    the window edges at ``±w_im`` of ``cal.json``.
+    """
+    if e.error:
+        return figures.empty_figure(f"Not available: {e.error}", scheme, height=HEIGHT)
+    return _gradient_error_figure(
+        e,
+        "im_error",
+        w_im,
+        scheme,
+        unit="1/K0",
+        fmt="+.4f",
+        label="1/K0 error",
+        y_title="im_error: apex_im - im_pred_cal (1/K0)",
+        invalid="No accepted row has a valid 1/K0 error (no apex 1/K0 or no 1/K0 calibration).",
+        uirevision="cal-im-error",
+        meta={},
+    )
+
+
+def _gradient_error_figure(
+    e: AcceptedErrors,
+    column: str,
+    edge: float | None,
+    scheme: str,
+    *,
+    unit: str,
+    fmt: str,
+    label: str,
+    y_title: str,
+    invalid: str,
+    uirevision: str,
+    meta: dict[str, Any],
+) -> go.Figure:
+    """``column`` of the accepted identifications against ``apex_rt``, with 0, ``±edge``
+    and the binned 5th, 50th and 95th percentiles."""
     df = e.frame
-    column = error_column(view)
-    y = df[column].to_numpy(dtype=np.float64) if len(df) else np.zeros(0)
+    y = df[column].to_numpy(dtype=np.float64) if column in df else np.zeros(len(df))
     x = df["apex_rt"].to_numpy(dtype=np.float64) if len(df) else np.zeros(0)
     ok = np.zeros(len(df), dtype=bool)
     ok[id_rows(e, column)] = True
     if not ok.any():
-        why = (
-            "No accepted identification at this threshold."
-            if not len(df)
-            else "No accepted row has a valid RT error (no RT calibration: the engine writes 0)."
-        )
+        why = "No accepted identification at this threshold." if not len(df) else invalid
         return figures.empty_figure(why, scheme, height=HEIGHT)
     fig = go.Figure()
-    unit = "of the half-window" if view == "fraction" else "s"
-    fmt = ".3f" if view == "fraction" else "+.2f"
     fig.add_trace(
         _scatter(
             int(ok.sum()),
@@ -524,7 +582,7 @@ def error_figure(e: AcceptedErrors, scheme: str = "light", *, view: str = "secon
             ),
             name="accepted identifications",
             meta={"kind": "ids"},
-            hovertemplate=f"apex %{{x:.1f}} s<br>RT error %{{y:{fmt}}} {unit}"
+            hovertemplate=f"apex %{{x:.1f}} s<br>{label} %{{y:{fmt}}} {unit}"
             "<extra>accepted</extra>",
         )
     )
@@ -550,40 +608,28 @@ def error_figure(e: AcceptedErrors, scheme: str = "light", *, view: str = "secon
                     "<extra>viewer-derived</extra>",
                 )
             )
-    hw = df["half_width"].to_numpy(dtype=np.float64)
-    hw = hw[np.isfinite(hw)]
     shapes = [_hline("zero", 0.0, theme.PREDICTION, "dot", width=1)]
-    edge = None
-    if view == "fraction":
-        edge = 1.0
-    elif hw.size and float(np.min(hw)) == float(np.max(hw)):
-        edge = float(hw[0])
     if edge is not None:
         shapes.append(_hline("edge-hi", edge, WINDOW_LINE, "dashdot"))
         shapes.append(_hline("edge-lo", -edge, WINDOW_LINE, "dashdot"))
-    for s in shapes:
-        fig.add_shape(**s)
+    for sh in shapes:
+        fig.add_shape(**sh)
     top = float(np.max(np.abs(y[ok])))
     if edge is not None:
         top = max(top, edge)
     x_rng = _pad(float(x[ok].min()), float(x[ok].max()))
     y_rng = [-1.08 * top, 1.08 * top]
-    y_title = (
-        "rt_error_signed / half-window (viewer-derived)"
-        if view == "fraction"
-        else "rt_error_signed: apex - rt_pred_cal (s)"
-    )
     return figures.themed(
         fig,
         scheme,
         height=HEIGHT,
         hovermode="closest",
-        uirevision="cal-error",
+        uirevision=uirevision,
         showlegend=False,
         margin=dict(l=60, r=16, t=22, b=46),
         xaxis=dict(title="apex_rt of the identification (s)", range=x_rng, showspikes=False),
         yaxis=dict(title=y_title, range=y_rng, zeroline=False, showspikes=False),
-        meta={"view": view, "home": {"xaxis": x_rng, "yaxis": y_rng}},
+        meta={**meta, "home": {"xaxis": x_rng, "yaxis": y_rng}},
     )
 
 

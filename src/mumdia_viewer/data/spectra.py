@@ -42,7 +42,7 @@ from __future__ import annotations
 import operator
 import threading
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -119,7 +119,9 @@ _MS2_SCALARS = (
     "precursor_mz",
     "precursor_charge",
 )
+_MS2_IM = ("window_im_lower", "window_im_upper")
 _WINDOW_COLUMNS = ("window_id", "target", "lower", "upper")
+_WINDOW_IM = ("im_lower", "im_upper")
 _EMPTY_ROWS = np.zeros(0, dtype=np.int64)
 _EMPTY_ROWS.setflags(write=False)
 _MEMO_LOCK = threading.Lock()
@@ -162,6 +164,8 @@ class Spectrum:
     ``mz`` to float64 before ppm arithmetic. The window and precursor fields are None
     for an MS1 scan; ``precursor_charge`` is also None when the MS2 scan records none
     (every Astral scan). ``native_id`` is the mzML nativeID (MS2 ``id`` column).
+    ``im`` is each peak's 1/K0 (float32, aligned with ``mz``) and ``window_im_lower`` /
+    ``window_im_upper`` the MS2 slot's 1/K0 bounds, on diaPASEF runs only (else None).
     """
 
     level: int
@@ -177,10 +181,20 @@ class Spectrum:
     window_target: float | None = None
     precursor_mz: float | None = None
     precursor_charge: int | None = None
+    im: np.ndarray | None = None
+    window_im_lower: float | None = None
+    window_im_upper: float | None = None
 
     @property
     def n_peaks(self) -> int:
         return int(self.mz.size)
+
+    def im_slice(self, lo: float, hi: float) -> Spectrum:
+        """The peaks with ``lo <= im <= hi`` (the scan itself when it has no 1/K0)."""
+        if self.im is None:
+            return self
+        keep = (self.im >= lo) & (self.im <= hi)
+        return replace(self, mz=self.mz[keep], intensity=self.intensity[keep], im=self.im[keep])
 
     @property
     def label(self) -> str:
@@ -254,6 +268,10 @@ def _peak_list(table: pa.Table, name: str, local: int, *, where: str) -> np.ndar
         raise LayoutError(f"{where}: column {name} holds {typ.value_type}, not float32.")
     values, _ = list_values(col.slice(local, 1))
     return np.array(values, dtype=np.float32)  # a copy: it holds no reference to the table
+
+
+def _opt(value: float) -> float | None:
+    return float(value) if np.isfinite(value) else None
 
 
 def _release_arrow_memory() -> None:
@@ -362,8 +380,9 @@ SPECTRUM_CACHE = SpectrumCache()
 
 def _read_peaks(
     handle: ParquetHandle, row: int, *, with_id: bool, where: str, cached: bool
-) -> tuple[np.ndarray, np.ndarray, str | None]:
-    """The m/z and intensity arrays of one row, and its ``id`` when ``with_id``.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, str | None]:
+    """The m/z, intensity and (diaPASEF) 1/K0 arrays of one row, and its ``id`` when
+    ``with_id``.
 
     The row group comes from :data:`SPECTRUM_CACHE` when ``cached``; otherwise it is
     read, sliced and dropped.
@@ -375,6 +394,8 @@ def _read_peaks(
     rg = int(np.searchsorted(offsets, row, side="right") - 1)
     local = row - int(offsets[rg])
     columns = ["mz", "intensity", "id"] if with_id else ["mz", "intensity"]
+    if "im" in handle.schema.names:
+        columns.append("im")
     key = (str(handle.path), handle.stamp, rg, tuple(columns))
     table = SPECTRUM_CACHE.get(key) if cached else None
     kept = table is not None
@@ -386,6 +407,7 @@ def _read_peaks(
     try:
         mz = _peak_list(table, "mz", local, where=where)
         intensity = _peak_list(table, "intensity", local, where=where)
+        im = _peak_list(table, "im", local, where=where) if "im" in columns else None
         native_id = None
         if with_id and "id" in table.column_names:
             value = table.column("id")[local].as_py()
@@ -398,8 +420,10 @@ def _read_peaks(
         raise InconsistentData(
             f"{where}: row {row} has {mz.size} m/z values but {intensity.size} intensities."
         )
-    _readonly(mz, intensity)
-    return mz, intensity, native_id
+    if im is not None and im.size != mz.size:
+        im = None  # ponytail: a misaligned 1/K0 list is dropped, not reported
+    _readonly(mz, intensity, *(() if im is None else (im,)))
+    return mz, intensity, im, native_id
 
 
 class _ScanLookup:
@@ -458,7 +482,8 @@ class ScanTable:
         self.emit_window_grid = emit_window_grid
         where = str(self._handle.path)
         check_columns("spectra_ms2", self._handle.schema, where=where)
-        table = self._handle.read(columns=list(_MS2_SCALARS))
+        im_cols = [c for c in _MS2_IM if c in self._handle.schema.names]
+        table = self._handle.read(columns=[*_MS2_SCALARS, *im_cols])
         names = set(table.column_names)
         self.scan_index = _numeric(table, "scan_index", np.int64, where=where)
         self.rt = _numeric(table, "rt_seconds", np.float64, where=where)
@@ -476,6 +501,13 @@ class ScanTable:
             _numeric(table, "precursor_charge", np.int32, where=where, fill=0)
             if "precursor_charge" in names
             else np.zeros(n, dtype=np.int32)
+        )
+        # The slot's 1/K0 bounds of a diaPASEF scan (spectra_ms2 v2); NaN on 3D data.
+        self.im_lower, self.im_upper = (
+            _numeric(table, c, np.float64, where=where, fill=float("nan"))
+            if c in names
+            else np.full(n, np.nan)
+            for c in _MS2_IM
         )
         del table
         self.n = n
@@ -528,18 +560,27 @@ class ScanTable:
             handle = _as_handle(windows)
             wwhere = str(handle.path)
             check_columns("isolation_windows", handle.schema, where=wwhere)
-            t = handle.read(columns=list(_WINDOW_COLUMNS))
+            im_cols = [c for c in _WINDOW_IM if c in handle.schema.names]
+            t = handle.read(columns=[*_WINDOW_COLUMNS, *im_cols])
             ids = _numeric(t, "window_id", np.int64, where=wwhere)
             target = _numeric(t, "target", np.float64, where=wwhere)
             lower = _numeric(t, "lower", np.float64, where=wwhere)
             upper = _numeric(t, "upper", np.float64, where=wwhere)
+            im_lo, im_hi = (
+                _numeric(t, c, np.float64, where=wwhere, fill=float("nan"))
+                if c in im_cols
+                else np.full(ids.size, np.nan)
+                for c in _WINDOW_IM
+            )
             self.windows_source = "isolation_windows.parquet"
         else:
             ids, first = np.unique(self.window_id, return_index=True)
             target, lower, upper = self.target[first], self.lower[first], self.upper[first]
+            im_lo, im_hi = self.im_lower[first], self.im_upper[first]
             self.windows_source = "derived from spectra_ms2 (first scan of each window_id)"
         order = np.argsort(ids, kind="stable")
         ids, target, lower, upper = ids[order], target[order], lower[order], upper[order]
+        im_lo, im_hi = im_lo[order], im_hi[order]
         if ids.size > 1 and bool(np.any(ids[1:] == ids[:-1])):
             raise InconsistentData(f"{self.windows_source}: window_id values repeat.")
         if self.n == 0:
@@ -562,6 +603,7 @@ class ScanTable:
                 f"({lower[pos[bad]]}, {upper[pos[bad]]})."
             )
         self._w_ids, self._w_target, self._w_lower, self._w_upper = ids, target, lower, upper
+        self._w_im_lower, self._w_im_upper = im_lo, im_hi
         self._w_pos = pos.astype(np.int64)
         _readonly(self._w_ids, self._w_target, self._w_lower, self._w_upper, self._w_pos)
 
@@ -762,7 +804,7 @@ class ScanTable:
         """
         row = int(row)
         where = str(self._handle.path)
-        mz, intensity, native_id = _read_peaks(
+        mz, intensity, im, native_id = _read_peaks(
             self._handle, row, with_id=True, where=where, cached=cached
         )
         pmz = float(self.precursor_mz[row])
@@ -781,6 +823,9 @@ class ScanTable:
             window_target=float(self.target[row]),
             precursor_mz=pmz if np.isfinite(pmz) else None,
             precursor_charge=charge if charge != 0 else None,
+            im=im,
+            window_im_lower=_opt(self.im_lower[row]),
+            window_im_upper=_opt(self.im_upper[row]),
         )
 
     # ----------------------------------------------------------------- scheme
@@ -799,7 +844,7 @@ class ScanTable:
             rows = self._order[self._starts[w] : self._starts[w + 1]]
             if rows.size > 1:
                 cycle[k] = float(np.median(np.diff(self.rt[rows])))
-        return pd.DataFrame(
+        frame = pd.DataFrame(
             {
                 "window_id": self._w_ids[order],
                 "lower": lower,
@@ -812,6 +857,15 @@ class ScanTable:
                 "aif": (target == 0.0) & (lower == 0.0) & (upper == 1.0e6),
             }
         )
+        if self.has_im:
+            frame["im_lower"] = self._w_im_lower[order]
+            frame["im_upper"] = self._w_im_upper[order]
+        return frame
+
+    @property
+    def has_im(self) -> bool:
+        """True when the windows carry 1/K0 bounds (a diaPASEF run)."""
+        return bool(np.isfinite(self._w_im_lower).any())
 
 
 def isolation_scheme(rs: ResultSet, run: Run | str | int) -> pd.DataFrame:
@@ -822,7 +876,8 @@ def isolation_scheme(rs: ResultSet, run: Run | str | int) -> pd.DataFrame:
     ``overlap_with_next`` (Th; ``upper - next.lower``: positive is an overlap with the
     next window, 0 a shared bound, negative a gap; NaN for the last window),
     ``cycle_time_s`` (median RT step between consecutive scans of the window) and
-    ``aif`` (the synthesized full-range window ``(0, 1e6)`` of an all-ion scan).
+    ``aif`` (the synthesized full-range window ``(0, 1e6)`` of an all-ion scan). A
+    diaPASEF run adds ``im_lower`` and ``im_upper``, the 1/K0 bounds of each slot.
     """
     return ScanTable.for_run(rs, run).scheme()
 
@@ -1043,7 +1098,9 @@ class Ms1Table:
         """The peaks of MS1 ``row``, read from its row group (see :meth:`ScanTable.spectrum`)."""
         row = int(row)
         where = str(self._handle.path)
-        mz, intensity, _ = _read_peaks(self._handle, row, with_id=False, where=where, cached=cached)
+        mz, intensity, im, _ = _read_peaks(
+            self._handle, row, with_id=False, where=where, cached=cached
+        )
         return Spectrum(
             level=1,
             row=row,
@@ -1051,4 +1108,5 @@ class Ms1Table:
             rt=float(self.rt[row]),
             mz=mz,
             intensity=intensity,
+            im=im,
         )

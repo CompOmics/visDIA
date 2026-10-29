@@ -10,7 +10,7 @@ Two layouts exist (:class:`~mumdia_viewer.data.schemas.ChromatogramLayout`):
   candidate in the same row group wrote it, and the trace from its first to its last value
   that is not ``+0.0`` (``intensity_trimmed`` at ``trace_offset`` of ``trace_len``).
 
-The ion-mobility layouts of the unreleased engine branch (PR #140) add ``im`` to layout 1
+The diaPASEF (ion-mobility) layouts add ``im`` to layout 1
 (version 3) or ``im_trimmed`` to layout 2 (version 4): the 1/K0 of each point, ``0.0``
 where there is no mobility.
 

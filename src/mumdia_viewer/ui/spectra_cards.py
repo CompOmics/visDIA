@@ -21,6 +21,7 @@ from mumdia_viewer.data.qc import BASE_PEAK_LABEL, TIC_LABEL
 from mumdia_viewer.data.scans import FragmentOverlay, IsotopeOverlay, ScanRef
 from mumdia_viewer.data.spectra import NEAREST_MS1_LABEL, PRECEDING_MS1_LABEL, Spectrum
 
+from .figures import empty_figure
 from .icons import _URIS, icon
 from .state import href, stop_label
 from .widgets import empty, graph, peptidoform, section
@@ -28,6 +29,7 @@ from .widgets import empty, graph, peptidoform, section
 GRID_ID = "sp-grid"
 SPECTRUM_GRAPH = "sp-spectrum"
 NAV_GRAPH = "sp-nav"
+IM_GRAPH = "sp-im-map"
 Q_BAR_FULL = 1e-4
 NEAR_OPTIONS = [
     {"value": "apex:2", "label": "apex ± 2 s"},
@@ -394,7 +396,62 @@ def nav_card(
 # --------------------------------------------------------------------------- spectrum
 
 
-def spectrum_card(fig: Any, title: Any, seq: Any, foot: Any) -> Any:
+def im_block(fig: Any, note: str, bounds: tuple[float, float], scheme: str = "light") -> Any:
+    """The diaPASEF part of the spectrum card: the 1/K0 filter and the m/z x 1/K0 peak
+    map. Always in the layout (the callback reads its controls); hidden without 1/K0."""
+    lo, hi = bounds
+    controls = dmc.Group(
+        [
+            dmc.Text("1/K0 filter", size="xs", fw=600, c="dimmed"),
+            tip(
+                dmc.SegmentedControl(
+                    id="sp-im-mode",
+                    data=[
+                        {"value": "all", "label": "All peaks"},
+                        {"value": "cand", "label": "Candidate window"},
+                        {"value": "slider", "label": "Slider"},
+                    ],
+                    value="cand",
+                    size="xs",
+                    radius="xl",
+                ),
+                "Which peaks the spectrum and the fragment matches use: every peak; those "
+                "inside the selected candidate's 1/K0 window (run_windows im_lo to im_hi, the "
+                "window extraction used); or the range of the slider.",
+            ),
+            dmc.RangeSlider(
+                id="sp-im-range",
+                min=lo,
+                max=hi,
+                step=0.01,
+                minRange=0.01,
+                value=[lo, hi],
+                size="sm",
+                label=None,
+                marks=[{"value": v, "label": f"{v:.2f}"} for v in (lo, hi)],
+                style={"flex": 1, "minWidth": 160},
+                mb=12,
+            ),
+        ],
+        gap=10,
+        wrap="nowrap",
+        align="center",
+    )
+    return html.Div(
+        [
+            controls,
+            html.Div(
+                graph(IM_GRAPH, fig or empty_figure("No 1/K0 per peak.", scheme, height=80)),
+                className="sp-spectrum",
+            ),
+            dmc.Text(note, id="sp-im-note", size="xs", c="dimmed"),
+        ],
+        id="sp-im-block",
+        style=None if fig is not None else {"display": "none"},
+    )
+
+
+def spectrum_card(fig: Any, title: Any, seq: Any, foot: Any, im: Any = None) -> Any:
     right = dmc.Group(
         [
             tip(
@@ -429,13 +486,17 @@ def spectrum_card(fig: Any, title: Any, seq: Any, foot: Any) -> Any:
         html.Div(seq, id="sp-seq", className="sp-seq"),
         html.Div(graph(SPECTRUM_GRAPH, fig), className="sp-spectrum"),
         html.Div(foot, id="sp-spec-foot"),
+        im,
         right=right,
         help=(
             "The peaks of the scan as convert stored them (spectra_ms1 or spectra_ms2), as "
             "stems. Drag to zoom; double click to reset. For an MS2 scan the orange band is "
             "its isolation window. Select a candidate in the list to overlay its library "
             "fragments (MS2: matched peaks in colour, the library mirrored below) or its "
-            "precursor isotopes (MS1)."
+            "precursor isotopes (MS1). diaPASEF: the peak tops are coloured by their 1/K0, "
+            "the map below places every peak in m/z x 1/K0 (the orange rectangle is the "
+            "slot's isolation window, the dashed lines the candidate's 1/K0 window), and the "
+            "1/K0 filter picks the peaks the spectrum and the matches use."
         ),
         id="sp-spec-card",
     )

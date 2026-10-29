@@ -25,7 +25,6 @@ from mumdia_viewer.data import (
     ArtifactNotFound,
     InconsistentData,
     LayoutError,
-    SchemaVersionError,
     open_results,
 )
 from mumdia_viewer.data.candidate_index import CandidateIndex
@@ -550,7 +549,7 @@ def test_filtered_query_decodes_the_engine_fixture(fixture_dir, tmp_path, with_i
     version = {(1, False): 1, (2, False): 2, (1, True): 3, (2, True): 4}[(layout, with_im)]
     run_dir = copy_fixture(fixture_dir, "chrom_v1", tmp_path)
     replace_chromatograms(run_dir, table, version, row_group_size=3)
-    rs = open_results(run_dir, allow_unreleased=with_im)
+    rs = open_results(run_dir)
     whole = ChromatogramSource(rs, rs.runs[0])
     query = ChromatogramSource(rs, rs.runs[0])
     query.max_row_group_bytes = 0
@@ -760,15 +759,12 @@ def test_slice_inside_a_candidate_is_refused(fixture_dir):
         decode_rows(group.slice(k), V2)
 
 
-def test_unreleased_im_versions_need_opt_in(fixture_dir, tmp_path):
+def test_im_v4_table_through_a_source(fixture_dir, tmp_path):
     cids, dense, ims = engine_fixture()
     table = v2_table(cids, dense, 1 << 16, ims)
     run_dir = copy_fixture(fixture_dir, "chrom_v1", tmp_path)
     replace_chromatograms(run_dir, table, 4)
-    with pytest.raises(SchemaVersionError, match="unreleased"):
-        rs = open_results(run_dir)
-        ChromatogramSource.for_run(rs, rs.runs[0])
-    rs = open_results(run_dir, allow_unreleased=True)
+    rs = open_results(run_dir)
     src = ChromatogramSource.for_run(rs, rs.runs[0])
     assert src.tables[0].layout == V4
     chrom = src.read(1)
@@ -789,7 +785,7 @@ def test_v3_table_through_a_source(fixture_dir, tmp_path):
     v3 = v1.append_column("im", lists(im))
     run_dir = copy_fixture(fixture_dir, "chrom_v1", tmp_path)
     replace_chromatograms(run_dir, v3, 3)
-    rs = open_results(run_dir, allow_unreleased=True)
+    rs = open_results(run_dir)
     src = ChromatogramSource.for_run(rs, rs.runs[0])
     assert src.tables[0].layout == V3
     cid = int(src.candidate_ids()[0])

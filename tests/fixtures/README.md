@@ -1,7 +1,7 @@
 # Test fixtures
 
-Small MuMDIA outputs used by the test suite. All were written by mumdia 0.5.0
-(git 80d4874318cb, the v0.5.0 release) on 2026-09-30. They are copies, so every path
+Small MuMDIA outputs used by the test suite. All but `im/out_tims` were written by
+mumdia 0.5.0 (git 80d4874318cb, the v0.5.0 release) on 2026-09-30. They are copies, so every path
 recorded in their manifests points at the directory they were written to; the viewer
 re-roots those paths onto the copy (this also tests moved-directory support).
 
@@ -20,8 +20,24 @@ re-roots those paths onto the copy (this also tests moved-directory support).
 | `overlap/out_ovl_pg_rg50`, `out_ovl_pg_pool_rg50` | `tools/overlap` | per-group calibration, 50-row row groups |
 | `overlap/out_ovl128`, `out_ovl128_pool` | `tools/overlap` | 128 planned bands with 8 skipped (trimmed to the chromatogram tables) |
 | `entrapment/entrap_mode` | `tools/entrapment` | `psms_scored.parquet` of a rescore in entrapment mode (`entrapment_native`) |
+| `im/out_tims` | `tools/im/subset_run.py` | diaPASEF single run (ion mobility), cut from a real search (see below) |
 
 `tools/` holds the fixture generators (derived from `ci/make_fixture_mzml.py` of the
 MuMDIA repository, Apache-2.0) and the configurations used. The smoke fixtures are
 regenerated with `MUMDIA_BIN=<mumdia> PYTHON=python bash ci/smoke.sh <work>` in a MuMDIA
 checkout; note that the script deletes `<work>` first.
+
+## `im/out_tims` (diaPASEF)
+
+A cut of a real search, not a synthetic run: mumdia 0.8.0 (git a8366300a758) on
+`ttSCP_diaPASEF_Condition_A_Sample_Alpha_01_11494.d` of the ProteoBench HYE diaPASEF set
+(timsTOF, 24 diaPASEF windows), FASTA `ProteoBenchFASTA_MixedSpecies_HYE.fasta`, the
+`configs/examples/diapasef.json` recipe with ms2pip `timsTOF2024`, no missed cleavages,
+length 7 to 30, charge 2 to 3 (`features.im_features` on, so chromatograms v4 carry
+per-point 1/K0), written 2026-10-28. `tools/im/subset_run.py` (defaults) keeps 650
+candidates with a scored apex in 2200 to 2215 s (250 accepted targets, 250 decoys, 150
+other targets), renumbers their `candidate_id` to 0..649 in every table, keeps the scans
+from 2185 to 2230 s trimmed to their 200 (MS2) or 400 (MS1) most intense peaks, and nulls
+the content hashes. Scores, q values and `cal.json` are the full run's. Regenerate with
+
+    python tests/fixtures/tools/im/subset_run.py <full run> tests/fixtures/im/out_tims

@@ -1,0 +1,26 @@
+{
+  "logical_name": "fragment_library_fragments",
+  "schema_name": "fragment_library_fragments",
+  "schema_version": 1,
+  "stage": "predict-frag",
+  "rows": 7276,
+  "content_hash": null,
+  "params": {
+    "fragment_predictor": "Ms2pip",
+    "im_predictor": "Im2deep",
+    "ms2pip_model": "timsTOF2024",
+    "rt_predictor": "Deeplc",
+    "top_n": 12
+  },
+  "stats": {
+    "candidates": 3709640,
+    "candidates_dropped_unpredicted": 0,
+    "candidates_dropped_with_their_pair": 0,
+    "fragments": 42913580,
+    "pairs_dropped_unpredicted": 0,
+    "parse_errors": 0,
+    "without_im": 0
+  },
+  "model_identity": "native-rt-v1 (placeholder: DeepLC deferred to the multi-head calibration); ms2pip-4.2.0-timsTOF2024; im2deep-2.0.2-uni",
+  "elapsed_ms": 1349831
+}
