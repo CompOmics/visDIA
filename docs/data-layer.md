@@ -193,3 +193,20 @@ the values quant and the report used. The exact decoy partner is looked up per c
 (one query for the rows of the candidate's library `peptidoform_id`), and only when the
 library row carries the scored row's peptidoform and charge, which rejects a library that
 is not the one the run searched.
+
+### Mobilograms (diaPASEF)
+
+`mobilogram.centroid_mobilogram(rs, detail, centre_rt=None, frames=2)` returns intensity
+against 1/K0 for every predicted fragment and MS1 isotope of a candidate, from the run's
+own spectra tables: the frame nearest `centre_rt` (the apex by default) and up to `frames`
+frames either side, over every slot that holds the precursor. A fragment's points are every
+peak within the extraction's tolerance and mass offset, an MS1 isotope's every peak within
+`extract.prec_tol_ppm`, inside the slots' 1/K0 range; convert keeps one 1/K0 per centroid,
+so these are sticks, not a profile. `mobilogram.engine_mobilogram(rs, detail, ...)` runs
+`mumdia mobilogram` (an engine newer than 0.9.0, `--engine` or `MUMDIA_BIN`) on the `.d` the
+spectra report names, through `--remap`, and returns the raw events binned in 1/K0 over the
+same frames; its answers are kept in the viewer cache, keyed by the `.d` and input stamps,
+the candidate, the centre RT, the frames, the bin width and the engine version, and a call
+times out after 120 s (`MUMDIA_VIEWER_MOBILOGRAM_TIMEOUT`). Both return a `Mobilogram`
+whose `profile(ion, k)` sums (raw) or collects (centroids) the frames within `k` of the
+centre.

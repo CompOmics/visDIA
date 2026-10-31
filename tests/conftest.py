@@ -7,6 +7,9 @@ variables; they are skipped when the variable is unset:
 * ``MUMDIA_VIEWER_REAL_SINGLE``: a single-run directory (the Astral run);
 * ``MUMDIA_VIEWER_REAL_EXPERIMENT``: an experiment directory;
 * ``MUMDIA_VIEWER_REAL_TIMS``: a diaPASEF single-run directory (MuMDIA >= 0.7).
+
+Tests marked ``engine`` run a MuMDIA binary named by ``MUMDIA_BIN``; the mobilogram test
+also needs ``MUMDIA_VIEWER_TIMS_RAW``, the ``.d`` the ``tims`` fixture was cut from.
 """
 
 from __future__ import annotations

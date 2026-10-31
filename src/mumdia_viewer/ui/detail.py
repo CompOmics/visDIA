@@ -48,6 +48,7 @@ from . import coverage
 from . import detail_cards as cards
 from . import detail_figures as dfig
 from . import detail_ions as ions
+from . import detail_mobilogram as mobc
 from . import detail_preview as pv
 from . import detail_view as view
 from .icons import icon
@@ -423,6 +424,7 @@ def layout(ctx: PageContext) -> Any:
                         cards.xic_card(ctx, d, frags, grid, key=f"{run}|{int(cid)}", views=views),
                         cards.rt_card(d, xr, pct_map),
                         cards.im_trace_card(ctx, d, frags),
+                        mobc.mobilogram_card(ctx, d, frags, centre_rt=scan_rt),
                     )
                     if c is not None
                 ],
@@ -732,6 +734,8 @@ def register(app, get_rs, base: str) -> None:
             return features(get_rs(), key, chosen, _scheme(scheme))
         except ViewerError as exc:
             return no_update, [dmc.Text(str(exc), size="xs", c="red")], no_update
+
+    mobc.register(app, get_rs, get_detail)
 
 
 __all__ = [
