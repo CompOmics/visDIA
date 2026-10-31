@@ -21,6 +21,7 @@ re-roots those paths onto the copy (this also tests moved-directory support).
 | `overlap/out_ovl128`, `out_ovl128_pool` | `tools/overlap` | 128 planned bands with 8 skipped (trimmed to the chromatogram tables) |
 | `entrapment/entrap_mode` | `tools/entrapment` | `psms_scored.parquet` of a rescore in entrapment mode (`entrapment_native`) |
 | `im/out_tims` | `tools/im/subset_run.py` | diaPASEF single run (ion mobility), cut from a real search (see below) |
+| `im/mobilogram_engine.json` | `mumdia mobilogram --run-dir im/out_tims --raw <the full .d> --candidate 11 12 99999 --json` | a recorded engine answer (candidates 11 and 12, and 99999 as an error), input paths cut to file names |
 
 `tools/` holds the fixture generators (derived from `ci/make_fixture_mzml.py` of the
 MuMDIA repository, Apache-2.0) and the configurations used. The smoke fixtures are

@@ -28,6 +28,7 @@ mumdia-viewer <run-or-experiment-dir> [--fasta proteins.fasta] [--compare <other
 | `--remap OLD=NEW` | Inputs recorded under `OLD` are now under `NEW`. |
 | `--host` | The address to bind. The default is 127.0.0.1; any other value exposes the viewer to the network. |
 | `--no-token` | Serve at `/` instead of a random path. Use it only on a single-user machine. |
+| `--engine PATH` | A MuMDIA binary (default: the `MUMDIA_BIN` environment variable). On a diaPASEF run the precursor page then reads the raw mobilogram from the `.d` with `mumdia mobilogram`. The desktop application sets `MUMDIA_BIN` to its own engine. |
 
 **On a remote server**, start the viewer with `--no-browser`. Then forward the port:
 `ssh -L <port>:127.0.0.1:<port> <user>@<server>`. Open the printed address, including
@@ -54,7 +55,7 @@ its token, on your own machine.
 |---|---|
 | **Overview** | Version, configuration, inputs and stage timings. Counts per unit, with a threshold slider that shows exact counts at each stop. Identification curves, score distributions and per-run counts. The engine-report check. A **Report** button downloads a static, offline HTML file. |
 | **Identifications** | Linked panels, as in PeptideShaker's Overview: protein groups, then the peptides of the selected group (with sequence coverage), then the precursors of the selected peptide, then a preview of the selected precursor. Click or use the arrow keys to select; Enter opens the precursor page. **TSV** downloads every row under the filters. |
-| **Precursor detail** | Why one identification was accepted. Fragment and MS1 XICs linked to the spectrum mirror: click a scan, or use the slider or the ← → keys. The fragmentation diagram and the ion table. Every q value with its unit and winner, evidence cards with percentiles, the base-peptide competition, the decoy partner, quantification, coverage, and your verdict. |
+| **Precursor detail** | Why one identification was accepted. Fragment and MS1 XICs linked to the spectrum mirror: click a scan, or use the slider or the ← → keys. The fragmentation diagram and the ion table. On a diaPASEF run, the 1/K0 of the traces and the mobilogram of the shown scan's frame (raw events through the engine, or the converted centroids). Every q value with its unit and winner, evidence cards with percentiles, the base-peptide competition, the decoy partner, quantification, coverage, and your verdict. |
 | **Protein** | A protein group: its members, a verdict strip, linked peptides and precursors, sequence coverage, and the quantity per run (experiments). |
 | **Calibration** | RT anchors rebuilt with the engine's rule and checked against `cal.json`. The fitted map and the window. In-sample residuals, which are fit diagnostics, not error estimates. The RT error of accepted identifications. Fragment mass calibration. |
 | **Run QC** | TIC and base peak, identifications across RT, scan rate, isolation windows, peaks per MS2 spectrum (the `--top-peaks-ms2` check), and the charge, length, missed-cleavage and modification distributions. |
