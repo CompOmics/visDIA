@@ -47,6 +47,15 @@ RELEASED: dict[str, frozenset[int]] = {
     "candidate_audit": frozenset({1}),
 }
 
+# Versions added by releases after v0.5.0 on every kind of input: the cross-run export of a
+# pattern rule (``fragment_quant`` v6, MuMDIA 0.9.0; written by the cross-run step of an
+# experiment, never by a single run's final quant) and the account of the fragments behind
+# each quantity (``quant_fragments`` v1, ``quant.fragment_detail``).
+LATER: dict[str, frozenset[int]] = {
+    "fragment_quant": frozenset({6}),
+    "quant_fragments": frozenset({1}),
+}
+
 # Versions written only by pre-release development builds that report version 0.1.0.
 DEV_BUILD: dict[str, frozenset[int]] = {
     "psms_scored": frozenset({3}),
@@ -98,6 +107,7 @@ class VersionInfo:
 def supported_versions(schema_name: str, *, allow_unreleased: bool = False) -> frozenset[int]:
     """Versions of ``schema_name`` this viewer reads."""
     versions = set(RELEASED.get(schema_name, frozenset()))
+    versions |= LATER.get(schema_name, frozenset())
     versions |= DEV_BUILD.get(schema_name, frozenset())
     versions |= DIAPASEF.get(schema_name, frozenset())
     if allow_unreleased:
@@ -114,7 +124,7 @@ def check_version(
     Schema names outside the registry are not checked, because the viewer does not
     read them.
     """
-    if version is None or schema_name not in RELEASED:
+    if version is None or (schema_name not in RELEASED and schema_name not in LATER):
         return
     supported = supported_versions(schema_name, allow_unreleased=allow_unreleased)
     if version in supported:
@@ -252,6 +262,16 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
         "fragment_name",
         "quantity",
     ),
+    "quant_fragments": (
+        "candidate_id",
+        "fragment_name",
+        "area",
+        "selected",
+        "weight",
+        "rank",
+        "background",
+        "rule",
+    ),
     "lfq_maxlfq": ("protein_group", "run", "quantity", "n_features"),
     "lfq_maxlfq_sibling": ("group", "charge", "run", "quantity", "n_features"),
     "overlap_losers": ("band", "candidate_id"),
@@ -375,8 +395,10 @@ def infer_version(schema_name: str, schema: pa.Schema) -> int | None:
         if "apex_im_mad" in names:
             return 4
         return 2 if "peak_rank" in names else 1
-    if all(c in names for c in REQUIRED_COLUMNS.get(schema_name, ())) and schema_name in RELEASED:
-        released = RELEASED[schema_name]
+    if all(c in names for c in REQUIRED_COLUMNS.get(schema_name, ())) and (
+        schema_name in RELEASED or schema_name in LATER
+    ):
+        released = RELEASED.get(schema_name, frozenset()) | LATER.get(schema_name, frozenset())
         if len(released) == 1:
             return next(iter(released))
     return None

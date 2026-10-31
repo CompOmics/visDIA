@@ -942,6 +942,28 @@ def _scrubber(grid: view.ScanGrid | None, views: dict[str, Any]) -> Any:
     )
 
 
+QUANT_VIEWS = [
+    {"value": "highlight", "label": "Quant: highlight"},
+    {"value": "only", "label": "only"},
+    {"value": "off", "label": "off"},
+]
+
+
+def quant_source_text(qf: Any) -> str:
+    """Where the fragments quant used come from, in one sentence."""
+    if qf is None:
+        return "No quant state, so no fragments used for a quantity."
+    if not qf.available:
+        return f"Fragments used for the quantity: {qf.message}."
+    if qf.derived:
+        return (
+            f"Fragments used for the quantity: {qf.label}. The viewer applied the {qf.rule} "
+            f"top-N rule and the selected fragments reproduce peptide_quant.quantity "
+            f"({qf.message.split('quantity ', 1)[-1]})."
+        )
+    return f"Fragments used for the quantity: {qf.label}, rule {qf.rule}; {qf.message}."
+
+
 def xic_card(
     ctx: PageContext,
     d: PrecursorDetail,
@@ -957,6 +979,10 @@ def xic_card(
     sub = f"{n_obs} of {len(frags)} predicted fragments observed"
     if grid is not None and grid.size:
         sub += f" in {grid.size} grid scans"
+    qf = d.quant_fragments
+    if qf is not None and qf.available:
+        sub += f"; {qf.n_selected} used for the quantity"
+        sub += " (viewer-derived, verified)" if qf.derived else " (engine)"
     help_ = (
         "Every fragment trace of the candidate over retention time (top) and the MS1 isotope "
         "traces (bottom). The plot opens on the identification's peak; Whole window shows "
@@ -984,6 +1010,23 @@ def xic_card(
         radius="xl",
         style=None if peak is not None else {"display": "none"},
     )
+    has_qf = qf is not None and qf.available
+    quant_switch = tip(
+        dmc.SegmentedControl(
+            id="pd-xic-quant",
+            data=QUANT_VIEWS,
+            value=dfig.quant_mode_default(d),
+            size="xs",
+            radius="xl",
+            color="violet",
+            style=None if has_qf else {"display": "none"},
+        ),
+        quant_source_text(qf)
+        + " Highlight: the fragments used are drawn thicker with their area over the "
+        "integration window filled, the others dimmed. Only: the others hidden. Off: every "
+        "fragment alike.",
+        w=340,
+    )
     if peak is not None and span:
         view_switch = tip(
             view_switch,
@@ -1010,7 +1053,7 @@ def xic_card(
         ),
         _scrubber(grid, views),
         dcc.Store(id="pd-xview", data=views),
-        right=dmc.Group([view_switch, axis], gap=6, wrap="nowrap"),
+        right=dmc.Group([quant_switch, view_switch, axis], gap=6, wrap="nowrap"),
         subtitle=sub,
         help=help_,
         count=len(frags),
@@ -1311,14 +1354,53 @@ def _yes(v: bool, no: str = "no") -> Any:
     return html.Span(no, className="pd-no")
 
 
+def _quant_cells(qf: Any, name: str) -> list[Any]:
+    """The quant columns of one fragment row: area, used (with its rank) and weight."""
+    rec = qf.by_name().get(name) if qf is not None else None
+    if rec is None:
+        return [dmc.TableTd("", className="mv-num"), dmc.TableTd(""), dmc.TableTd("")]
+    area = float(rec["area"])
+    used = bool(rec["selected"])
+    rank = int(rec["rank"])
+    weight = float(rec["weight"])
+    if used:
+        mark: Any = html.Span(
+            [ico("check", 13), html.Span(f" {rank}", className="pd-qf-rank")],
+            className="pd-yes",
+            title=f"used for the quantity, rank {rank} of the {qf.rule} rule",
+        )
+    else:
+        mark = html.Span(
+            "no", className="pd-no", title=f"rank {rank}" if rank else "not ranked by the rule"
+        )
+    if weight != weight:  # NaN: the pattern rules fit the fragments, no weight
+        w_text = "fit" if qf.rule in ("pattern_fit", "pattern_profile") else "none"
+    else:
+        w_text = f"{weight:.3g}"
+    return [
+        dmc.TableTd(f"{area:,.0f}" if area == area else "", className="mv-num"),
+        dmc.TableTd(mark),
+        dmc.TableTd(w_text, className="mv-num"),
+    ]
+
+
 def fragment_table(
-    m: MirrorData | None, frags: list[view.Fragment], hidden: set[int] | None = None
+    m: MirrorData | None,
+    frags: list[view.Fragment],
+    hidden: set[int] | None = None,
+    qf: Any = None,
 ) -> Any:
-    """The fragment table of the shown scan: one row per predicted fragment."""
+    """The fragment table of the shown scan: one row per predicted fragment.
+
+    With a fragment account (``qf``, :class:`~mumdia_viewer.data.quant_fragments.QuantFragments`)
+    it adds each fragment's quant area, whether quant used it and its weight; a selection the
+    viewer derived carries the derived mark.
+    """
     rows = view.fragment_rows(m, frags)
     if not rows:
         return dmc.Text("No predicted fragments.", size="sm", c="dimmed")
     hidden = hidden or set()
+    show_qf = qf is not None and qf.available
 
     def th(text: Any, label: str | None = None, numeric: bool = False) -> Any:
         # The page's one tooltip (data-tip): the table is rebuilt on every scan step.
@@ -1345,6 +1427,33 @@ def fragment_table(
                     "in XIC",
                     "observed in the XIC: a matched peak in at least one scan of the RT window",
                 ),
+                *(
+                    [
+                        th(
+                            "quant area",
+                            "the fragment's integrated area in quant ("
+                            + (qf.label if show_qf else "")
+                            + "); summed over the selected fragments it is the quantity",
+                            True,
+                        ),
+                        th(
+                            ["used", html.Br(), html.Span("derived", className="pd-th-derived")]
+                            if show_qf and qf.derived
+                            else "used",
+                            ("Viewer-derived and verified: " if show_qf and qf.derived else "")
+                            + "quant used this fragment for the quantity; the number is its "
+                            "rank in the rule",
+                        ),
+                        th(
+                            "weight",
+                            "1 under the top-N rules; the fitted weight under cross_run; "
+                            "'fit' under the pattern rules, whose quantity is a fit",
+                            True,
+                        ),
+                    ]
+                    if show_qf
+                    else []
+                ),
             ]
         )
     )
@@ -1370,6 +1479,7 @@ def fragment_table(
                     dmc.TableTd(f"{f.predicted:.3f}", className="mv-num"),
                     dmc.TableTd(_yes(r.matched)),
                     dmc.TableTd(_yes(f.observed, "never")),
+                    *(_quant_cells(qf, f.name) if show_qf else []),
                 ],
                 className=cls,
                 **{"data-frag": str(f.index)},
@@ -1428,7 +1538,12 @@ FRAG_VIEWS = [
 ]
 
 
-def fragment_card(m: MirrorData | None, frags: list[view.Fragment], ladder: view.IonLadder) -> Any:
+def fragment_card(
+    m: MirrorData | None,
+    frags: list[view.Fragment],
+    ladder: view.IonLadder,
+    qf: Any = None,
+) -> Any:
     switch = dmc.SegmentedControl(
         id="pd-frag-view",
         data=FRAG_VIEWS,
@@ -1440,7 +1555,7 @@ def fragment_card(m: MirrorData | None, frags: list[view.Fragment], ladder: view
     )
     return card(
         "Fragments in the shown scan",
-        html.Div(fragment_table(m, frags), id="pd-frag-table"),
+        html.Div(fragment_table(m, frags, qf=qf), id="pd-frag-table"),
         html.Div(ladder_panel(ladder, m=m), id="pd-ladder", style={"display": "none"}),
         right=switch,
         subtitle="Hover a fragment to find it in the plots; click it to hide it",
@@ -1448,7 +1563,10 @@ def fragment_card(m: MirrorData | None, frags: list[view.Fragment], ladder: view
         "in the shown scan. The ion table puts the same fragments on the sequence (PeptideShaker's "
         "ladder form): one row per residue, b ions on the left and y ions on the right. "
         "Hover a fragment to find it in the XIC, the spectrum and on the sequence; click it "
-        "to hide it in both plots, and again to show it. The matches are the viewer's.",
+        "to hide it in both plots, and again to show it. The matches are the viewer's. "
+        "The quant columns say which fragments quant used for the quantity: from the engine's "
+        "quant_fragments.parquet, or derived by the viewer and checked against the quantity "
+        "(marked derived).",
         count=len(frags),
         id="pd-frag-card",
     )
@@ -1942,9 +2060,107 @@ def quant_card(d: PrecursorDetail) -> Any:
         unit,
         bars,
         _defs(facts) if facts else None,
+        quant_fragment_list(d),
         dmc.Text(sentence(q.reason), size="xs", c="dimmed", mt="xs"),
         subtitle="The integration window against the identification's bounds",
         id="pd-quant-card",
+    )
+
+
+def _plain_fragment(name: str) -> Any:
+    """``y7^2`` as y7 with a superscript 2+."""
+    from mumdia_viewer.data.chromatograms import parse_fragment_name
+
+    parsed = parse_fragment_name(name)
+    if parsed is None:
+        return html.Span(name)
+    ion, ordinal, charge = parsed
+    base = f"{ion}{ordinal}"
+    return html.Span(base if (charge or 1) == 1 else [base, html.Sup(f"{charge}+")])
+
+
+def quant_fragment_list(d: PrecursorDetail) -> Any:
+    """The fragments quant used for the quantity, with their areas (quant card)."""
+    qf = d.quant_fragments
+    if qf is None or d.quant is None or d.quant.state == "not_selected":
+        return None
+    if not qf.available:
+        return dmc.Text(
+            f"Fragments used: {qf.message}.", size="xs", c="dimmed", mt="xs", id="pd-qf-none"
+        )
+    sel = qf.rows[qf.rows["selected"]].sort_values("rank", kind="stable")
+    show_w = qf.rule not in ("observed_area", "predicted")
+    head = dmc.TableThead(
+        dmc.TableTr(
+            [
+                dmc.TableTh("rank", className="mv-num"),
+                dmc.TableTh("fragment"),
+                dmc.TableTh("area", className="mv-num"),
+                *([dmc.TableTh("weight", className="mv-num")] if show_w else []),
+            ]
+        )
+    )
+    body = []
+    for rec in sel.to_dict("records"):
+        w = float(rec["weight"])
+        body.append(
+            dmc.TableTr(
+                [
+                    dmc.TableTd(str(int(rec["rank"])), className="mv-num"),
+                    dmc.TableTd(_plain_fragment(str(rec["fragment_name"]))),
+                    dmc.TableTd(f"{float(rec['area']):,.0f}", className="mv-num"),
+                    *(
+                        [dmc.TableTd("fit" if w != w else f"{w:.3g}", className="mv-num")]
+                        if show_w
+                        else []
+                    ),
+                ]
+            )
+        )
+    source = (
+        derived_badge(
+            "the viewer applied the top-N rule to the run's areas and checked that the "
+            "selected fragments reproduce peptide_quant.quantity"
+        )
+        if qf.derived
+        else tip(
+            dmc.Badge(
+                "engine",
+                size="xs",
+                color="violet",
+                variant="light",
+                style={"textTransform": "none"},
+            ),
+            "quant_fragments.parquet, written by the engine (quant.fragment_detail)",
+        )
+    )
+    check = (
+        "reproduces the quantity"
+        if qf.verified
+        else ("a fit: not a sum of areas" if qf.verified is None else "does NOT reproduce it")
+    )
+    return html.Div(
+        [
+            dmc.Group(
+                [
+                    dmc.Text(
+                        f"Fragments used ({qf.n_selected}, rule {qf.rule}): {check}",
+                        size="xs",
+                        fw=600,
+                    ),
+                    source,
+                ],
+                gap=6,
+                mt="xs",
+            ),
+            dmc.Table(
+                [head, dmc.TableTbody(body)],
+                verticalSpacing=2,
+                horizontalSpacing=6,
+                className="mv-table pd-qf-table",
+            ),
+        ],
+        id="pd-qf-list",
     )
 
 

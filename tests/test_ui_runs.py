@@ -60,7 +60,7 @@ def test_runs_layout_builds_with_unique_ids(open_fixture, name):
         ids = _ids(tree)
         assert len(ids) == len(set(ids)), [i for i in ids if ids.count(i) > 1]
         graphs = [c for c in _walk(tree) if type(c).__name__ == "Graph"]
-        assert {g.id["name"] for g in graphs} == {"xr-xic", "xr-quant", "xr-q"}
+        assert {g.id["name"] for g in graphs} == {"xr-xic", "xr-quant", "xr-q", "xr-qf"}
         text = _text(tree)
         assert "XICs across runs" in text and "Grouped q" in text
         for run in rs.runs:
