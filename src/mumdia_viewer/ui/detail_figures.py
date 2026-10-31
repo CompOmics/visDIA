@@ -8,6 +8,14 @@ Fragment traces carry ``meta = {"frag": k, "op": base opacity}``, where ``k`` is
 fragment's index among the candidate's fragment rows (see :mod:`.detail_view`). The page's
 script uses it to link a fragment across the XIC, the mirror and the fragment table.
 Shapes and annotations carry a ``name`` so the script (and the tests) can find them.
+
+When the precursor has a fragment account (:mod:`mumdia_viewer.data.quant_fragments`), the
+XIC's fragment traces also carry ``meta["qf"]``: ``"used"`` for a fragment quant used for the
+quantity, ``"other"`` for the rest, and ``"fill"`` for the area of a used fragment over the
+integration window. :data:`QF_STYLE` gives each role's line width, opacity and whether it is
+hidden in each mode (``highlight``, ``only``, ``off``); the page's script applies the same
+table when the mode changes, and ``meta["qhide"]`` keeps a trace hidden through the
+fragment-visibility toggles.
 """
 
 from __future__ import annotations
@@ -55,6 +63,30 @@ LABEL_FONT = 10
 XIC_MARGIN = {"l": 64, "r": 36, "t": 48, "b": 46}
 MIRROR_MARGIN = {"l": 56, "r": 36, "t": 26, "b": 44}
 MODEBAR = {"orientation": "v"}
+
+# How the XIC shows the fragments quant used, per mode and role: (line width, opacity,
+# hidden). detail.js (`mvd.quant`) holds the same table.
+QF_MODES = ("highlight", "only", "off")
+QF_STYLE: dict[str, dict[str, tuple[float, float, bool]]] = {
+    "highlight": {"used": (3.2, 1.0, False), "other": (1.2, 0.3, False), "fill": (0, 1.0, False)},
+    "only": {"used": (2.6, 1.0, False), "other": (1.2, 0.3, True), "fill": (0, 1.0, False)},
+    "off": {"used": (1.8, 1.0, False), "other": (1.8, 1.0, False), "fill": (0, 1.0, True)},
+}
+QF_FILL_ALPHA = 0.22
+
+
+def _rgba(colour: str, alpha: float) -> str:
+    c = colour.lstrip("#")
+    if len(c) != 6:
+        return colour
+    r, g, b = (int(c[i : i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
+def quant_mode_default(d: PrecursorDetail, compact: bool = False) -> str:
+    """``highlight`` when the precursor has a fragment account to show, else ``off``."""
+    qf = d.quant_fragments
+    return "highlight" if not compact and qf is not None and qf.available else "off"
 
 
 def _finite(v: Any) -> float | None:
@@ -218,6 +250,7 @@ def xic_figure(
     height: int | None = None,
     key: str | None = None,
     view: str = "peak",
+    quant_mode: str | None = None,
 ) -> go.Figure:
     """Fragment XICs (top) and MS1 isotope XICs (bottom) on one shared RT axis.
 
@@ -238,6 +271,11 @@ def xic_figure(
     ``key`` (``"<run>|<candidate id>"``) names the page in ``layout.meta``, so the page's
     script moves the band of its own figure only. ``height`` None leaves the height to
     the page's CSS.
+
+    ``quant_mode`` (``highlight``, ``only`` or ``off``; None: :func:`quant_mode_default`)
+    marks the fragments quant used for the quantity, when the precursor has a fragment
+    account: thicker traces with their area over the integration window filled, the other
+    fragments dimmed (``highlight``) or hidden (``only``). See :data:`QF_STYLE`.
     """
     tall = height if height is not None else (COMPACT_XIC_HEIGHT if compact else None)
     chrom = d.chromatogram
@@ -245,6 +283,14 @@ def xic_figure(
         return _empty("No chromatogram rows for this candidate.", scheme, tall)
     traces = chrom.fragments()
     hidden = set(hidden)
+    mode = quant_mode if quant_mode in QF_MODES else quant_mode_default(d, compact)
+    qf = (
+        d.quant_fragments if d.quant_fragments is not None and d.quant_fragments.available else None
+    )
+    used = set(qf.selected_names()) if qf is not None else set()
+    q = d.quant
+    win_lo = q.integration_lo_rt if q is not None else None
+    win_hi = q.integration_hi_rt if q is not None else None
     fig = make_subplots(
         rows=2,
         cols=1,
@@ -300,7 +346,17 @@ def xic_figure(
     for f in frags:
         t = traces[f.index]
         visible = "legendonly" if f.index in hidden else True
+        role = None if qf is None else ("used" if f.name in used else "other")
+        width, op, qhide = (
+            QF_STYLE[mode][role] if role is not None else (1.6 if compact else 1.8, 1.0, False)
+        )
+        if compact and role is not None:
+            width = 1.6 if mode == "off" else width
         if f.observed:
+            meta: dict[str, Any] = {"frag": f.index, "op": op}
+            if role is not None:
+                meta.update(qf=role, qhide=qhide)
+            used_text = "<br><i>used for the quantity</i>" if role == "used" else ""
             fig.add_trace(
                 go.Scatter(
                     x=_r(t.rt, 3),
@@ -308,19 +364,49 @@ def xic_figure(
                     mode="lines" if compact else "lines+markers",
                     name=f.html,
                     legendgroup=f"f{f.index}",
-                    line=dict(color=f.colour, width=1.6 if compact else 1.8, shape="linear"),
+                    line=dict(color=f.colour, width=width, shape="linear"),
                     marker=dict(size=4, color=f.colour),
-                    meta={"frag": f.index, "op": 1.0},
-                    visible=visible,
+                    meta=meta,
+                    opacity=op,
+                    visible="legendonly" if qhide else visible,
                     hovertemplate=(
                         f"<b>{f.html}</b> · m/z {f.mz:.4f}<br>RT %{{x:.2f}} s<br>"
-                        "intensity %{y:,.0f}<extra></extra>"
+                        f"intensity %{{y:,.0f}}{used_text}<extra></extra>"
                     ),
                 ),
                 row=1,
                 col=1,
             )
+            if role == "used" and not compact and t.rt.size:
+                rt = np.asarray(t.rt, dtype="float64")
+                keep = np.ones(rt.size, dtype=bool)
+                if win_lo is not None:
+                    keep &= rt >= float(np.float32(win_lo))
+                if win_hi is not None:
+                    keep &= rt <= float(np.float32(win_hi))
+                if keep.any():
+                    _, fill_op, fill_hide = QF_STYLE[mode]["fill"]
+                    fig.add_trace(
+                        go.Scatter(
+                            x=_r(t.rt[keep], 3),
+                            y=_r(t.intensity[keep], 1),
+                            mode="none",
+                            fill="tozeroy",
+                            fillcolor=_rgba(f.colour, QF_FILL_ALPHA),
+                            name=f"{f.html} (integrated)",
+                            legendgroup=f"f{f.index}",
+                            showlegend=False,
+                            hoverinfo="skip",
+                            meta={"frag": f.index, "op": fill_op, "qf": "fill", "qhide": fill_hide},
+                            visible="legendonly" if fill_hide or f.index in hidden else True,
+                        ),
+                        row=1,
+                        col=1,
+                    )
         elif not compact:
+            meta = {"frag": f.index, "op": min(op, 0.5)}
+            if role is not None:
+                meta.update(qf=role, qhide=qhide)
             fig.add_trace(
                 go.Scatter(
                     x=[],
@@ -329,9 +415,9 @@ def xic_figure(
                     name=f"{f.html} (never observed)",
                     legendgroup=f"f{f.index}",
                     line=dict(color=f.colour, width=1.5, dash="dot"),
-                    meta={"frag": f.index, "op": 0.5},
-                    opacity=0.5,
-                    visible=visible,
+                    meta=meta,
+                    opacity=meta["op"],
+                    visible="legendonly" if qhide else visible,
                     hoverinfo="skip",
                 ),
                 row=1,
@@ -447,6 +533,7 @@ def xic_figure(
             "edges": edges,
             "step": step,
             "key": key,
+            "qf": mode if qf is not None else None,
         },
         **({} if compact else legends),
     )

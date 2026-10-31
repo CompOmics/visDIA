@@ -13,6 +13,8 @@ re-roots those paths onto the copy (this also tests moved-directory support).
 | `smoke/out_grouped` | arm `out_grouped` | grouped run, 3 bands, default (no pooled tables) |
 | `smoke/out_grouped_pool` | arm `out_grouped_pool` | same with pooled tables |
 | `smoke/exp` | arm `exp` | two-run experiment |
+| `smoke/out_qf` | arm `out_qf` (`quant.fragment_detail = true`) | single run with the engine's `quant_fragments.parquet` (trimmed: manifest, scored, quant, fragment and chromatogram tables) |
+| `smoke/exp_qf` | arm `exp_qf` (`quant.fragment_detail = true`) | two-run experiment with each run's `quant_fragments.parquet` (trimmed: no spectra, features, libraries or pass directories) |
 | `smoke/test_data/fixture.fasta` | `test_data/fixture.fasta` of the MuMDIA repository | FASTA input of the smoke runs |
 | `topk/out_dbl_topk3` | `tools/topk` | double-peak fixture with `extract.retain_top_peaks = promote_top_peaks = 3` |
 | `mbr/exp_mbr_c_tr_qt004` | `tools/mbr` | two-run experiment with match-between-runs (48 transfers) |
@@ -21,6 +23,11 @@ re-roots those paths onto the copy (this also tests moved-directory support).
 | `overlap/out_ovl128`, `out_ovl128_pool` | `tools/overlap` | 128 planned bands with 8 skipped (trimmed to the chromatogram tables) |
 | `entrapment/entrap_mode` | `tools/entrapment` | `psms_scored.parquet` of a rescore in entrapment mode (`entrapment_native`) |
 | `im/out_tims` | `tools/im/subset_run.py` | diaPASEF single run (ion mobility), cut from a real search (see below) |
+
+`smoke/out_qf` and `smoke/exp_qf` were written on 2026-10-31 by the MuMDIA branch that adds
+`quant.fragment_detail` (`feat/quant-fragment-detail`, version 0.9.0 plus the change), with the
+fixed scan window and the configuration of that branch's smoke test; every other file of
+those arms was byte-identical to the same build without the key.
 
 `tools/` holds the fixture generators (derived from `ci/make_fixture_mzml.py` of the
 MuMDIA repository, Apache-2.0) and the configurations used. The smoke fixtures are

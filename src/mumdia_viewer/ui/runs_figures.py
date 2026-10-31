@@ -16,6 +16,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from mumdia_viewer.data.across import MIXED, OTHER, PrecursorAcross, RatioResult, RunXic
+from mumdia_viewer.data.quant_fragments import AcrossFragments
 
 from . import figures, theme
 from .detail_view import fragments_of
@@ -445,6 +446,77 @@ def quantity_figure(across: PrecursorAcross, scheme: str = "light") -> go.Figure
         bargap=0.35,
         hovermode="closest",
         meta={"kind": "xr-quant"},
+    )
+
+
+def fragment_area_figure(af: AcrossFragments, scheme: str = "light") -> go.Figure:
+    """Run x fragment heat map of quant's fragment areas (log10), the used cells outlined.
+
+    A run without a fragment account (not scored, no quantity, or not reproducible) is an
+    empty row; a fragment with area 0 is drawn at the bottom of the scale. The hover names
+    each run's source: the engine's table or a viewer-derived, verified selection.
+    """
+    if not af.fragments or not af.any_available:
+        return figures.empty_figure(
+            "No run has the fragments quant used for this precursor.", scheme, height=220
+        )
+    area = af.area
+    positive = area[np.isfinite(area) & (area > 0)]
+    floor = float(np.log10(positive.min())) - 0.5 if positive.size else 0.0
+    with np.errstate(divide="ignore", invalid="ignore"):
+        z = np.where(np.isfinite(area), np.log10(np.where(area > 0, area, np.nan)), np.nan)
+    z = np.where(np.isfinite(area) & ~(area > 0), floor, z)
+    runs = [run_name(r) for r in af.runs]
+    names = list(af.fragments)
+    source = []
+    for acc in af.accounts:
+        if acc is None:
+            source.append("not scored")
+        elif not acc.available:
+            source.append("no fragment account: " + acc.message)
+        else:
+            source.append(acc.label)
+    text = np.empty(area.shape, dtype=object)
+    for i in range(area.shape[0]):
+        for j in range(area.shape[1]):
+            a = area[i, j]
+            used = "used for the quantity" if af.selected[i, j] else "not used"
+            text[i, j] = f"area {a:,.0f}<br>{used}<br>{source[i]}" if np.isfinite(a) else source[i]
+    fig = go.Figure(
+        go.Heatmap(
+            z=z,
+            x=names,
+            y=runs,
+            text=text,
+            colorscale="Viridis",
+            colorbar=dict(title="log10 area", thickness=12),
+            hoverongaps=False,
+            hovertemplate="<b>%{y}</b> · %{x}<br>%{text}<extra></extra>",
+            xgap=1,
+            ygap=1,
+        )
+    )
+    for i, j in zip(*np.nonzero(af.selected), strict=True):
+        fig.add_shape(
+            type="rect",
+            x0=j - 0.5,
+            x1=j + 0.5,
+            y0=i - 0.5,
+            y1=i + 0.5,
+            xref="x",
+            yref="y",
+            line=dict(color=theme.INTEGRATION, width=2.5),
+            fillcolor="rgba(0,0,0,0)",
+            name="used",
+        )
+    fig.update_xaxes(type="category", title_text="fragment", tickangle=-45)
+    fig.update_yaxes(type="category", autorange="reversed")
+    return figures.themed(
+        fig,
+        scheme,
+        height=max(220, 60 + 34 * len(runs)),
+        margin=dict(l=80, r=16, t=16, b=70),
+        meta={"kind": "xr-qf"},
     )
 
 

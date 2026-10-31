@@ -95,6 +95,8 @@ schema whose 3D versions have none infers the diaPASEF version.
 | `chromatograms` | 1, 2; 3, 4 (diaPASEF: per-point 1/K0) | 3/4 only when `features.im_features` or retrace is on |
 | `spectra_ms1`, `spectra_ms2`, `isolation_windows`, `fragment_library_precursors`, `seed_psms` | 1; 2 (diaPASEF) | |
 | `peptide_quant`, `protein_group_quant` | 2 | |
+| `fragment_quant` | 1; 5, 6 (the cross-run export; 6 under a pattern rule) | an experiment's run tables are the cross-run step's first pass |
+| `quant_fragments` | 1 | written under `quant.fragment_detail` |
 | every other artifact | 1 | |
 
 The diaPASEF versions are what MuMDIA ≥0.7 writes for a native Bruker `.d` (timsrust) and
@@ -193,3 +195,26 @@ the values quant and the report used. The exact decoy partner is looked up per c
 (one query for the rows of the candidate's library `peptidoform_id`), and only when the
 library row carries the scored row's peptidoform and charge, which rejects a library that
 is not the one the run searched.
+
+## The fragments behind a quantity
+
+`quant_fragments.quant_fragments(rs, run, cid)` says which fragments quant used for a
+candidate's quantity, with their areas, ranks and weights. Three sources are tried in order:
+
+1. the engine's `quant_fragments.parquet` (MuMDIA with `quant.fragment_detail`, which the
+   desktop application sets): nothing is derived;
+2. in a single run, the areas of `fragment_quant.parquet` with the configured top-N rule
+   applied by the viewer (`observed_area` by area; every other selection falls back to
+   `predicted` in a single run);
+3. the chromatograms, integrated as quant integrates them (the engine's float32 trapezoid
+   over the reported window), when quant subtracted no baseline, applied no envelope and,
+   in an experiment, ran no cross-run step.
+
+A viewer-derived selection is used only when its selected areas reproduce
+`peptide_quant.quantity` (exactly, on every fixture), and it is labelled "viewer-derived,
+verified". In an experiment the run directories' `fragment_quant.parquet` is the cross-run
+step's first-pass export and is never used. Without a source that reproduces the quantity
+the account says so and names `quant.fragment_detail`. Under the pattern rules the engine's
+quantity is a fit, not a sum of areas: the table names the fitted fragments and the check is
+their count. `fragment_areas_across` gives one precursor's run x fragment areas for the
+across-runs page.
