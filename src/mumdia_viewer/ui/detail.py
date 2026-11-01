@@ -431,7 +431,7 @@ def layout(ctx: PageContext) -> Any:
             html.Div(
                 [
                     cards.mirror_card(ctx, d, frags, m, why, ladder, x_range=mz),
-                    cards.fragment_card(m, frags, ladder),
+                    cards.fragment_card(m, frags, ladder, d.quant_fragments),
                 ],
                 className="pd-col",
             ),
@@ -546,7 +546,7 @@ def show_scan(
     badge = cards.match_badge(m)
     return (
         fig,
-        cards.fragment_table(m, frags, off),
+        cards.fragment_table(m, frags, off, d.quant_fragments),
         cards.scan_info(rs, d, m),
         cards.tolerance_row(d, m),
         cards.nav_data(rs, d, m),
@@ -624,6 +624,14 @@ def register(app, get_rs, base: str) -> None:
         Input("pd-hidden", "data"),
         State(XIC, "figure"),
         State(MIRROR, "figure"),
+        prevent_initial_call=True,
+    )
+    app.clientside_callback(
+        ClientsideFunction("mvd", "quant"),
+        Output(XIC, "figure", allow_duplicate=True),
+        Input("pd-xic-quant", "value"),
+        State(XIC, "figure"),
+        State("pd-hidden", "data"),
         prevent_initial_call=True,
     )
     app.clientside_callback(

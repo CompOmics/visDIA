@@ -48,6 +48,7 @@ RUN_FILES: dict[str, str] = {
     "peptide_quant": "peptide_quant.parquet",
     "protein_group_quant": "protein_group_quant.parquet",
     "fragment_quant": "fragment_quant.parquet",
+    "quant_fragments": "quant_fragments.parquet",
     "spectra_ms2": "spectra/spectra_ms2.parquet",
     "spectra_ms1": "spectra/spectra_ms1.parquet",
     "isolation_windows": "spectra/isolation_windows.parquet",
@@ -847,7 +848,7 @@ def _open_experiment(
         artifacts: dict[str, Artifact] = {}
         if "scored" in recs:
             artifacts["psms_scored"] = b.from_record(recs["scored"], kind="psms_scored")
-        for base in ("peptide_quant", "protein_group_quant"):
+        for base in ("peptide_quant", "protein_group_quant", "quant_fragments"):
             if base in recs:
                 artifacts[base] = b.from_record(recs[base], kind=base)
         for kind, rel in RUN_FILES.items():

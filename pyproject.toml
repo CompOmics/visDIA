@@ -17,12 +17,12 @@ classifiers = [
 ]
 dependencies = [
     "pyarrow>=16",
-    "duckdb>=1.1",
+    "duckdb>=1.1,<2",
     "numpy>=1.26",
     "pandas>=2.2",
     "blake3>=0.4",
     "dash>=3.0",
-    "dash-mantine-components>=2.0",
+    "dash-mantine-components>=2.0,<3",
     "dash-ag-grid>=32",
     "plotly>=5.22",
 ]

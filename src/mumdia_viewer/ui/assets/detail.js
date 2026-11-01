@@ -22,6 +22,13 @@
   const DIM = 0.14;
   const GROUP = ".pd-linked";
   const NAV_KEY = "mv-nav";
+  // How the XIC shows the fragments quant used (detail_figures.QF_STYLE): per mode and
+  // role, [line width, opacity, hidden].
+  const QF_STYLE = {
+    highlight: { used: [3.2, 1.0, false], other: [1.2, 0.3, false], fill: [0, 1.0, false] },
+    only: { used: [2.6, 1.0, false], other: [1.2, 0.3, true], fill: [0, 1.0, false] },
+    off: { used: [1.8, 1.0, false], other: [1.8, 1.0, false], fill: [0, 1.0, true] },
+  };
   const PENDING_MAX = 6000;
 
   // The page state the clientside callbacks share (reset by `init` on every page).
@@ -132,7 +139,8 @@
       if (k === null) {
         return t;
       }
-      const want = off.has(k) ? (legendonly ? "legendonly" : false) : true;
+      const qhide = !!(t.meta && t.meta.qhide);
+      const want = off.has(k) || qhide ? (legendonly ? "legendonly" : false) : true;
       const now = t.visible === undefined ? true : t.visible;
       if (now === want) {
         return t;
@@ -847,6 +855,49 @@
       // Fragment visibility in both plots.
       hidden: function (hidden, xic, mirror) {
         return [withHidden(xic, hidden, true), withHidden(mirror, hidden, false)];
+      },
+
+      // How the XIC shows the fragments quant used: highlight, only or off
+      // (detail_figures.QF_STYLE). A hidden fragment stays hidden.
+      quant: function (mode, fig, hidden) {
+        const style = QF_STYLE[mode];
+        if (!fig || !fig.data || !style) {
+          return NO();
+        }
+        const off = new Set(hidden || []);
+        let changed = false;
+        const data = fig.data.map(function (t) {
+          const role = t.meta && t.meta.qf;
+          const s = role ? style[role] : null;
+          if (!s) {
+            return t;
+          }
+          changed = true;
+          const k = fragOf(t);
+          const meta = Object.assign({}, t.meta, { qhide: s[2] });
+          const out = Object.assign({}, t, {
+            meta: meta,
+            visible: s[2] || (k !== null && off.has(k)) ? "legendonly" : true,
+          });
+          if (role !== "fill") {
+            // A fragment never observed has no points: it keeps its dotted line at half
+            // opacity at most.
+            const empty = !t.x || !t.x.length;
+            meta.op = empty ? Math.min(s[1], 0.5) : s[1];
+            out.opacity = meta.op;
+            if (!empty) {
+              out.line = Object.assign({}, t.line || {}, { width: s[0] });
+            }
+          }
+          return out;
+        });
+        if (!changed) {
+          return NO();
+        }
+        const layout = Object.assign({}, fig.layout, {
+          meta: Object.assign({}, (fig.layout && fig.layout.meta) || {}, { qf: mode }),
+        });
+        return Object.assign({}, fig, { data: data, layout: layout });
       },
 
       // Linear or log intensity axes of the XIC (both rows); a linear axis takes the

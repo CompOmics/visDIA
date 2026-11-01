@@ -23,6 +23,7 @@ from dash import ALL, ClientsideFunction, Input, Output, State, dcc, html, no_up
 
 from mumdia_viewer.data import ResultSet, ViewerError
 from mumdia_viewer.data import across as A
+from mumdia_viewer.data import quant_fragments as QF
 from mumdia_viewer.data.quantqc import suggest_conditions
 
 from . import runs_cards as cards
@@ -270,6 +271,10 @@ def layout(ctx: PageContext) -> Any:
         "Match-between-runs transfers are hatched in lime.",
         subtitle="peptide_quant per run" + (", with the MaxLFQ precursor" if a.experiment else ""),
     )
+    try:
+        qf_card: Any = fragment_card(ctx, fragment_areas(rs, a, xics))
+    except ViewerError as exc:
+        qf_card = qq_section("Fragment areas per run", empty(str(exc), "alert"), id="xr-qf-card")
     q_card = qq_section(
         "q values per run",
         graph("xr-q", qfig),
@@ -301,6 +306,7 @@ def layout(ctx: PageContext) -> Any:
             ],
             gutter="lg",
         ),
+        qf_card,
         sib_card,
     ]
     build = (time.perf_counter() - t0) * 1000.0
@@ -317,6 +323,59 @@ def layout(ctx: PageContext) -> Any:
 
 
 # --------------------------------------------------------------------------- callbacks
+
+
+def fragment_areas(rs: ResultSet, a: A.PrecursorAcross, xics: list[A.RunXic]) -> Any:
+    """The fragment accounts of the precursor in every run (memoised on the result set)."""
+    key = ("across.qf", rs.scored.identity(), a.peptidoform, a.charge)
+    return rs.memo(
+        key,
+        lambda: QF.fragment_areas_across(
+            rs, rs.runs, a.rows.to_dict("records"), [x.chromatogram for x in xics]
+        ),
+    )
+
+
+def fragment_card(ctx: PageContext, af: Any) -> Any:
+    """The run x fragment heat map of quant's fragment areas."""
+    n = sum(1 for acc in af.accounts if acc is not None and acc.available)
+    derived = af.any_derived
+    sources = sorted({acc.label for acc in af.accounts if acc is not None and acc.available})
+    missing = [
+        f"{rf.run_name(r)}: {acc.message}"
+        for r, acc in zip(af.runs, af.accounts, strict=True)
+        if acc is not None and not acc.available
+    ]
+    notes = (
+        [dmc.Text("Source: " + "; ".join(sources) + ".", size="xs", c="dimmed")] if sources else []
+    )
+    if missing:
+        notes.append(dmc.Text("No account: " + " | ".join(missing[:4]), size="xs", c="dimmed"))
+    if derived:
+        notes.insert(
+            0,
+            dmc.Badge(
+                "derived",
+                size="xs",
+                color="grape",
+                variant="light",
+                style={"textTransform": "none"},
+            ),
+        )
+    return qq_section(
+        "Fragment areas per run",
+        graph("xr-qf", rf.fragment_area_figure(af, ctx.scheme)),
+        *([dmc.Group(notes, gap=6, mt=4)] if notes else []),
+        count=f"{n} of {len(af.runs)} run{'s' if len(af.runs) != 1 else ''}",
+        help="Each run's integrated area of every fragment of the precursor (log10), with "
+        "the fragments quant used for the run's quantity outlined. From the engine's "
+        "quant_fragments.parquet (quant.fragment_detail) where the run has it; otherwise "
+        "the viewer applies the top-N rule to the run's areas and uses the result only when "
+        "it reproduces peptide_quant.quantity (marked derived). A run whose quantity the "
+        "viewer cannot reproduce (for example after the cross-run step) has an empty row.",
+        subtitle="Which fragments made each run's quantity, and how their areas compare",
+        id="xr-qf-card",
+    )
 
 
 def _across(rs: ResultSet, key: Any) -> A.PrecursorAcross | None:

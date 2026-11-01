@@ -48,6 +48,7 @@ from .features import (
 from .fragments import PeakMatch, Tolerance, extraction_tolerance, match_fragments
 from .mbr import mbr_ran, transfer_of
 from .quant import QuantState, quant_state
+from .quant_fragments import QuantFragments, quant_fragments
 from .rescore import RescoreInfo, rescore_info
 from .spectra import ScanPick, ScanTable, Spectrum
 from .windows import RtWindow, rt_window
@@ -129,6 +130,10 @@ class PrecursorDetail:
     # transfers), when it differs from the native row in ``scored``.
     scored_after_mbr: dict[str, Any] | None = None
     notes: list[str] = field(default_factory=list)
+    # The fragments behind the quantity (:mod:`.quant_fragments`): the engine's table, or a
+    # selection the viewer derived and checked against the quantity. None without a quant
+    # state.
+    quant_fragments: QuantFragments | None = None
     timings_ms: dict[str, float] = field(default_factory=dict)
 
     @property
@@ -796,6 +801,22 @@ def precursor_detail(rs: ResultSet, run: Run | str | int, candidate_id: int) -> 
         notes.append("the run has no readable spectra_ms2 table")
 
     quant = _guard(notes, "quant state", timer, "quant", quant_state, rs, run, cid)
+    qfrags = (
+        _guard(
+            notes,
+            "quant fragments",
+            timer,
+            "quant_fragments",
+            quant_fragments,
+            rs,
+            run,
+            cid,
+            chromatogram=chrom,
+            quant=quant,
+        )
+        if quant is not None
+        else None
+    )
 
     bpid = int(scored["base_peptide_id"])
     found = _guard(
@@ -889,6 +910,7 @@ def precursor_detail(rs: ResultSet, run: Run | str | int, candidate_id: int) -> 
         markers={},
         notes=notes,
         scored_after_mbr=after_mbr,
+        quant_fragments=qfrags,
     )
     detail.evidence = timer.run("evidence", _evidence, rs, detail)
     detail.markers = _markers(detail)

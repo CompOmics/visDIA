@@ -1,0 +1,31 @@
+{
+  "logical_name": "chromatograms",
+  "schema_name": "chromatograms",
+  "schema_version": 2,
+  "stage": "extract",
+  "rows": 2871,
+  "content_hash": "a7358a018f60c24cdb3a396d46caabf8a23e371e08a971cc1509fc83b7217435",
+  "params": {
+    "apex_count_window": 5,
+    "effective_frag_tol_ppm": 5.0,
+    "frag_ppm_offset": 0.0,
+    "frag_tol_ppm": 20.0,
+    "gate_coelution_min": 0.5,
+    "gate_min_score": 0.5,
+    "gate_mode": "window_mean",
+    "instrument": {
+      "accession": "MS:1000031",
+      "astral_analyzer": false,
+      "name": "instrument model"
+    },
+    "presence_min_coelution": 2,
+    "presence_min_fragments": 3,
+    "scan_window": 2
+  },
+  "stats": {
+    "accepted": 319,
+    "scan_window": 2
+  },
+  "model_identity": null,
+  "elapsed_ms": 15
+}

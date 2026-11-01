@@ -25,6 +25,8 @@ FIXTURE_DIRS = {
     "grouped": FIXTURES / "smoke" / "out_grouped",
     "grouped_pool": FIXTURES / "smoke" / "out_grouped_pool",
     "experiment": FIXTURES / "smoke" / "exp",
+    "single_qf": FIXTURES / "smoke" / "out_qf",
+    "experiment_qf": FIXTURES / "smoke" / "exp_qf",
     "topk": FIXTURES / "topk" / "out_dbl_topk3",
     "mbr": FIXTURES / "mbr" / "exp_mbr_c_tr_qt004",
     "ovl_bp": FIXTURES / "overlap" / "out_ovl_bp",
