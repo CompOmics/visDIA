@@ -4,6 +4,10 @@
 viewer uses the FASTA that the run recorded (a run searched from a FASTA), when that
 file is still where it was.
 
+``--engine PATH`` names a MuMDIA binary (default: ``MUMDIA_BIN``). On a diaPASEF run the
+precursor page then reads the raw mobilogram from the ``.d`` through ``mumdia
+mobilogram``; without one it shows the mobilogram of the converted centroids.
+
 The server binds 127.0.0.1 by default and opens a browser. On a remote server, start it
 with ``--no-browser`` and forward the port through SSH:
 ``ssh -L <port>:127.0.0.1:<port> <user>@<server>``, then open the printed address. The
@@ -65,6 +69,12 @@ def _parser() -> argparse.ArgumentParser:
         "(default: the FASTA the run recorded, if it is found)",
     )
     p.add_argument(
+        "--engine",
+        metavar="PATH",
+        help="a MuMDIA binary, for the raw mobilogram of a diaPASEF run "
+        "(default: the MUMDIA_BIN environment variable)",
+    )
+    p.add_argument(
         "--allow-unreleased",
         action="store_true",
         help="accept the ion-mobility schema versions of the unreleased branch",
@@ -85,6 +95,13 @@ def main(argv: list[str] | None = None) -> int:
     from mumdia_viewer.data.fasta import Fasta, FastaSource, find_recorded_fasta
     from mumdia_viewer.ui.app import create_app, create_compare_apps
 
+    if args.engine:
+        if not Path(args.engine).is_file():
+            print(f"--engine {args.engine} is not a file", file=sys.stderr)
+            return 2
+        from mumdia_viewer.data.mobilogram import set_engine
+
+        set_engine(args.engine)
     remaps = {}
     for item in args.remap:
         if "=" not in item:

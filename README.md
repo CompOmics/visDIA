@@ -46,6 +46,9 @@ token in the address keeps other users of a shared machine out.
   machine.
 - **Inputs that moved:** `--remap OLD=NEW` says where inputs recorded under `OLD` are
   now.
+- **Raw mobilograms (diaPASEF):** `--engine <mumdia>` (or `MUMDIA_BIN`) lets the precursor
+  page read the 1/K0 profile of a candidate's ions from the `.d` with `mumdia mobilogram`.
+  Without it the page shows the mobilogram of the converted centroids.
 
 The [user guide](docs/user-guide.md) describes every page, the options, where the viewer
 keeps its files, and how to solve common problems.

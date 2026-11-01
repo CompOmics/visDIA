@@ -27,7 +27,7 @@ from test_ui_spectra import _walk
 
 THREE_D = ("single", "experiment", "grouped", "topk", "mbr")
 # Ids of the elements only an ion-mobility run shows.
-IM_IDS = ("pd-ev-im", "pd-im-card", "cal-im-card", "cal-im-err-card")
+IM_IDS = ("pd-ev-im", "pd-im-card", "pd-mob-card", "cal-im-card", "cal-im-err-card")
 
 
 @pytest.fixture(scope="module")
