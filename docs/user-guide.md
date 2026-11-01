@@ -62,7 +62,7 @@ its token, on your own machine.
 | **Quant QC** | Quantity distributions, missing values, quant states, CVs within conditions, the LFQ matrix and protein profiles. Conditions are suggested from the mzML names and can be edited. |
 | **Condition ratios** | log2 A/B per species (by protein-name suffix), with expected ratios you enter. |
 | **Spectrum browser** | Any scan by index or RT, stepping within its window, and the candidates near it with their fragment matches. |
-| **Across runs** | One precursor in every run of an experiment: XICs, quantities with MBR transfers, and q values. Open it from the precursor page. |
+| **Across runs** | One precursor in every run of an experiment: XICs, quantities with MBR transfers, q values, and a run x fragment map of the fragment areas with the fragments each quantity used outlined. Open it from the precursor page. |
 | **Compare** | Two result sets: overlap per unit, score and quantity scatters, and the identifications unique to each side, with links into both viewers. It also shows configuration differences. |
 | **Notes** | Your verdicts. Give one on the precursor page (keys A accepted, R rejected, U unsure, or the card). Export them as TSV or JSON. |
 
