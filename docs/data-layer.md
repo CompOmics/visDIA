@@ -122,20 +122,43 @@ recorded hash on request and caches the verdict by (path, size, modification tim
 
 ## DuckDB
 
-Every result set has its own in-memory DuckDB database (8 threads, 512 MB) with a private
-spill directory, removed when the database closes: spill files are not safe to share
-between instances. When no private directory can be made, spilling is disabled rather
-than left at DuckDB's default, `.tmp` in the working directory. Every thread (a Dash
+Every result set has its own in-memory DuckDB database with a private spill directory,
+removed when the database closes: spill files are not safe to share between instances.
+The spill directory is under the cache directory, else under the system's temporary
+directory; when neither can hold a private directory, spilling is disabled rather than
+left at DuckDB's default, `.tmp` in the working directory. Every thread (a Dash
 callback) uses its own cursor. After each query the cursor runs a trivial statement, which
 ends the previous scan: DuckDB otherwise keeps a parquet file open, which on Windows
 blocks the engine from replacing it. Paths given to `read_parquet(?)` have their glob
 characters escaped, because DuckDB reads the parameter as a glob: a directory named
 `run[1]` would otherwise match `run1` and read another run's table.
 
+The database runs on the usable CPUs, at most 8 threads. Its memory limit
+(`duck.resolve_memory_limit`) is `MUMDIA_VIEWER_MEMORY_LIMIT` when it is set, a size in
+DuckDB's units (`8GB`, `1.5GiB`, `800MB`) or a share of the physical memory (`50%`); the
+command line's `--memory-limit` sets that variable. Otherwise it is a quarter of the
+physical memory, at least 1 GiB and at most 16 GiB, where the physical memory is the
+machine's or the process's smaller cgroup limit. An explicit value is not clamped. The
+limit was a fixed 512 MB before, and a desktop user's protein-group table of an 8.5M-row
+scored table failed against it. An out-of-memory error keeps its DuckDB type and its
+message states the limit, whether spilling is possible and how to raise the limit.
+
+Two settings are global, because a plain `SET` would apply to the base connection and
+not to the cursors that run the queries: the parquet metadata cache, and
+`disable_parquet_prefetching`. DuckDB 2 prefetches the projected columns of whole row
+groups on every thread, and MuMDIA writes about a million rows per row group; on an
+8.5M-row scored table those buffers alone filled the 488 MiB of the old limit, so every
+identification table failed there with DuckDB 2.0.0. DuckDB 1 prefetches remote files
+only. `preserve_insertion_order` keeps its default: some queries rely on file order
+without an `ORDER BY` (the first row of a fragment name wins in
+`quant_fragments._fragment_quant_areas`).
+
 ## Memory
 
-The fixed caches are the row-group cache (256 MB), the spectrum cache (96 MB) and
-DuckDB's limit (512 MB). `runtime.configure_environment()`, which the command-line entry
+The fixed caches are the row-group cache (256 MB) and the spectrum cache (96 MB); DuckDB's
+limit follows the machine (see DuckDB above) and is a ceiling, not a reservation: on the
+fleet's large tables the identification tables used tens to a few hundred MB of it.
+`runtime.configure_environment()`, which the command-line entry
 point calls before numpy and pyarrow are imported, sets one OpenBLAS thread and Arrow's
 system allocator: on the Astral single run the system allocator halved the private memory
 after 21 precursor details (to 0.64 to 0.72 GB) for about 17% slower warm details.
@@ -178,6 +201,14 @@ The winner of a group follows the engine: the highest score, a decoy on an exact
 tie, then the earlier row of the pooled table. In entrapment mode decoys do not compete
 and an entrapment row wins a tie. This rule reproduces the engine's sparse columns on
 every fixture and on the Astral run.
+
+The peptide and protein-group tables keep their working set small on large tables. Only
+the groups shown are counted, and a protein group is counted under an integer id rather
+than its string: a distinct count keyed by the group string held a copy of it per
+(group, peptide). When the rows of each group must be ranked (any filter other than the
+unit's own q below 1), the row numbers of the picked rows are found on the narrow
+columns, by an aggregate for protein groups (few groups of many rows) and by a window
+for base peptides (about one row per group), and only the picked rows are read whole.
 
 The engine's `peptides.tsv` lists one precursor (the winner) per accepted base peptide, so
 its row count, recorded as `n_precursors` in the experiment manifest, equals the peptide

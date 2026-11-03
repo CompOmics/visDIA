@@ -37,7 +37,9 @@ breaks another. These are ordinary tables, not TEMP tables: a TEMP table is priv
 the cursor that made it, and every thread has its own cursor.
 
 A DuckDB failure of a table query (for example out of memory on a very large result)
-raises :class:`ViewerError`, which names the query and the size of its result.
+raises :class:`ViewerError`, which names the query and the size of its result; an
+out-of-memory message also states the memory limit and how to raise it
+(:meth:`.duck.DuckDB.memory_hint`).
 """
 
 from __future__ import annotations
@@ -849,14 +851,33 @@ def _pick(ctx: _Context) -> SqlFragment:
         return SqlFragment("SELECT * FROM f")
     key = GROUP_KEY[ctx.unit]
     uq = UNIT_Q_COLUMN[ctx.unit]
-    tie = _entrapment_expr(ctx.rs, "f") if ctx.entrapment else SqlFragment("(f.label = 'decoy')")
+    tie = _entrapment_expr(ctx.rs, "g") if ctx.entrapment else SqlFragment("(g.label = 'decoy')")
+    # The row numbers of the picked rows are found on the narrow columns, and only those
+    # rows are read whole: a window over ``f.*`` held every passing row with all its
+    # columns.
+    if ctx.unit == "protein_group":
+        # Few groups of many rows, keyed by long strings: an aggregate, one state per group.
+        # The struct orders as the window's ORDER BY: for each term non-null first (NULLS
+        # LAST), then the higher value (DESC); the earlier row (rn ascending) last.
+        order = SqlFragment(
+            f"((g.{uq} < 1) IS NOT NULL, coalesce(g.{uq} < 1, false), g.score IS NOT NULL, "
+            "coalesce(g.score, 0), ("
+        )
+        order.extend(tie).add(") IS NOT NULL, coalesce((").extend(tie).add("), false), -g.rn)")
+        return (
+            SqlFragment("SELECT * FROM f WHERE f.rn IN (SELECT arg_max(g.rn, ")
+            .extend(order)
+            .add(f") FROM f g GROUP BY g.{key})")
+        )
+    # About one row per base peptide, keyed by an integer: a window over the narrow columns
+    # (an aggregate would hold a state for nearly every row).
     return (
         SqlFragment(
-            "SELECT * EXCLUDE (_rk) FROM (SELECT f.*, row_number() OVER ("
-            f"PARTITION BY f.{key} ORDER BY (f.{uq} < 1) DESC, f.score DESC, "
+            "SELECT * FROM f WHERE f.rn IN (SELECT rn FROM (SELECT g.rn, row_number() OVER ("
+            f"PARTITION BY g.{key} ORDER BY (g.{uq} < 1) DESC, g.score DESC, "
         )
         .extend(tie)
-        .add(" DESC, f.rn) AS _rk FROM f) WHERE _rk = 1")
+        .add(" DESC, g.rn) AS _rk FROM f g) WHERE _rk = 1)")
     )
 
 
@@ -895,13 +916,24 @@ def _count_ctes(ctx: _Context) -> tuple[SqlFragment, list[tuple[str, str]]]:
     """CTEs with the per-group counts of the keys of ``d`` (``c``), and their items.
 
     ``k`` holds every row (both labels, all runs) of the keys in ``d``, so the counts
-    cover whole groups, but only the groups shown are read.
+    cover whole groups, but only the groups shown are read. A protein group is counted
+    under an integer id (``gk``): a distinct count keyed by the group's string holds a
+    copy of that string per (group, peptide), which on a large table with long protein
+    groups is hundreds of MB.
     """
     key = GROUP_KEY[ctx.unit]
     t = ctx.query.threshold
     peptide = ctx.unit == "peptide"
-    k = SqlFragment(f", k AS (SELECT s.{key} AS gkey, s.label, s.source, ")
-    k.add("s.peptidoform, s.charge" if peptide else "s.base_peptide_id, s.peptide_q_value")
+    if peptide:
+        k = SqlFragment(f", k AS (SELECT s.{key} AS gkey, s.label, s.source, ")
+        k.add("s.peptidoform, s.charge")
+    else:
+        k = SqlFragment(
+            ", gk AS (SELECT gkey, row_number() OVER () AS gid FROM (SELECT DISTINCT "
+            f"{key} AS gkey FROM d WHERE {key} IS NOT NULL) g), "
+            "k AS (SELECT gk.gid AS gkey, s.label, s.source, s.base_peptide_id, "
+            "s.peptide_q_value"
+        )
     tr_join = SqlFragment()
     if ctx.experiment:
         if t is not None:
@@ -919,8 +951,10 @@ def _count_ctes(ctx: _Context) -> tuple[SqlFragment, list[tuple[str, str]]]:
         else:
             k.add(", false AS tr")
     k.add(" FROM read_parquet(?) s", ctx.scored_path)
+    if not peptide:
+        k.add(f" JOIN gk ON gk.gkey = s.{key}")
     k.extend(tr_join)
-    k.add(f" WHERE s.{key} IN (SELECT {key} FROM d))")
+    k.add(f" WHERE s.{key} IN (SELECT {key} FROM d))" if peptide else ")")
     items: list[tuple[str, str]] = []
     if peptide:
         k.add(
@@ -941,12 +975,14 @@ def _count_ctes(ctx: _Context) -> tuple[SqlFragment, list[tuple[str, str]]]:
             "FROM k GROUP BY 1, 2)"
         )
         items.append(("c.n_peptides", "n_peptides"))
+    # The counts by gkey; for protein groups gkey is the id, mapped back to the group last.
+    counts = "c" if peptide else "c0"
     if ctx.experiment:
         k.add(
             ", rr AS (SELECT gkey, label, source, bool_or(native) AS native, bool_or(tr) AS tr "
             "FROM k GROUP BY 1, 2, 3), r2 AS (SELECT gkey, label, count(*) FILTER (WHERE native) "
             "AS n_runs, count(*) FILTER (WHERE tr AND NOT native) AS n_runs_transfer_only "
-            "FROM rr GROUP BY 1, 2), c AS (SELECT p.*, coalesce(r2.n_runs, 0) AS n_runs, "
+            f"FROM rr GROUP BY 1, 2), {counts} AS (SELECT p.*, coalesce(r2.n_runs, 0) AS n_runs, "
             "coalesce(r2.n_runs_transfer_only, 0) AS n_runs_transfer_only FROM p "
             "LEFT JOIN r2 ON r2.gkey = p.gkey AND r2.label = p.label)"
         )
@@ -954,7 +990,12 @@ def _count_ctes(ctx: _Context) -> tuple[SqlFragment, list[tuple[str, str]]]:
         if ctx.mbr:
             items.append(("c.n_runs_transfer_only", "n_runs_transfer_only"))
     else:
-        k.add(", c AS (SELECT * FROM p)")
+        k.add(f", {counts} AS (SELECT * FROM p)")
+    if not peptide:
+        k.add(
+            ", c AS (SELECT gk.gkey AS gkey, c0.* EXCLUDE (gkey) FROM c0 "
+            "JOIN gk ON gk.gid = c0.gkey)"
+        )
     return k, items
 
 
@@ -1051,12 +1092,18 @@ class _Plan:
         return ["is_winner" if name == "not_winner" else name for name, _ in self.flags]
 
     def _prefix(self) -> SqlFragment:
+        """``x`` (scored rows with their joined columns) and ``f`` (the passing rows).
+
+        Both are NOT MATERIALIZED: ``_pick`` reads ``f`` twice, and a materialised ``f``
+        would hold every passing row with all its columns; inlined, each read is a scan
+        with only the columns it needs.
+        """
         x, _ = _row_relation(self.ctx)
         where, _ = _filters(self.ctx, self.row_columns)
         return (
-            SqlFragment("WITH x AS (")
+            SqlFragment("WITH x AS NOT MATERIALIZED (")
             .extend(x)
-            .add("), f AS (SELECT * FROM x")
+            .add("), f AS NOT MATERIALIZED (SELECT * FROM x")
             .extend(where)
             .add(")")
         )

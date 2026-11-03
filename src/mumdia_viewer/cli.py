@@ -8,6 +8,10 @@ file is still where it was.
 precursor page then reads the raw mobilogram from the ``.d`` through ``mumdia
 mobilogram``; without one it shows the mobilogram of the converted centroids.
 
+``--memory-limit SIZE`` bounds the memory of the viewer's DuckDB databases, for example
+``8GB`` or ``50%`` of the physical memory (default: ``MUMDIA_VIEWER_MEMORY_LIMIT``, else a
+quarter of the physical memory, at least 1 GiB and at most 16 GiB).
+
 The server binds 127.0.0.1 by default and opens a browser. On a remote server, start it
 with ``--no-browser`` and forward the port through SSH:
 ``ssh -L <port>:127.0.0.1:<port> <user>@<server>``, then open the printed address. The
@@ -18,6 +22,7 @@ without it.
 from __future__ import annotations
 
 import argparse
+import os
 import secrets
 import socket
 import sys
@@ -75,6 +80,13 @@ def _parser() -> argparse.ArgumentParser:
         "(default: the MUMDIA_BIN environment variable)",
     )
     p.add_argument(
+        "--memory-limit",
+        metavar="SIZE",
+        help="memory limit of the viewer's DuckDB databases, for example 8GB or 50%% "
+        "(default: the MUMDIA_VIEWER_MEMORY_LIMIT environment variable, else a quarter of "
+        "the physical memory, at least 1 GiB and at most 16 GiB)",
+    )
+    p.add_argument(
         "--allow-unreleased",
         action="store_true",
         help="accept the ion-mobility schema versions of the unreleased branch",
@@ -92,8 +104,20 @@ def main(argv: list[str] | None = None) -> int:
 
     configure_arrow()
     from mumdia_viewer.data import ViewerError, open_results
+    from mumdia_viewer.data.duck import MEMORY_ENV_VAR, resolve_memory_limit
     from mumdia_viewer.data.fasta import Fasta, FastaSource, find_recorded_fasta
     from mumdia_viewer.ui.app import create_app, create_compare_apps
+
+    try:
+        if args.memory_limit is not None:
+            resolve_memory_limit(args.memory_limit)
+            # Every database the viewer opens (one per result set) reads the variable.
+            os.environ[MEMORY_ENV_VAR] = args.memory_limit.strip()
+        resolve_memory_limit()
+    except ViewerError as exc:
+        where = "--memory-limit: " if args.memory_limit is not None else ""
+        print(f"mumdia-viewer: {where}{exc}", file=sys.stderr)
+        return 2
 
     if args.engine:
         if not Path(args.engine).is_file():
@@ -140,6 +164,10 @@ def main(argv: list[str] | None = None) -> int:
         app = create_app(rs, url_base=base, fasta=fasta)
     url = f"http://127.0.0.1:{port}{base}"
     print(f"mumdia-viewer: serving {rs.root} ({rs.kind}) at {url}")
+    print(
+        f"mumdia-viewer: DuckDB memory limit {rs.duck.limit} per result set; set "
+        f"{MEMORY_ENV_VAR} or --memory-limit to change it"
+    )
     if compare is not None:
         print(f"mumdia-viewer: comparing with {compare.root} ({compare.kind}), served at {url}b/")
     if args.host != "127.0.0.1":
