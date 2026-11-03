@@ -49,6 +49,9 @@ token in the address keeps other users of a shared machine out.
 - **Raw mobilograms (diaPASEF):** `--engine <mumdia>` (or `MUMDIA_BIN`) lets the precursor
   page read the 1/K0 profile of a candidate's ions from the `.d` with `mumdia mobilogram`.
   Without it the page shows the mobilogram of the converted centroids.
+- **Memory:** the viewer's DuckDB databases may use a quarter of the physical memory (at
+  least 1 GiB, at most 16 GiB). `--memory-limit 8GB` (or `50%`), or the
+  `MUMDIA_VIEWER_MEMORY_LIMIT` environment variable, sets another limit.
 
 The [user guide](docs/user-guide.md) describes every page, the options, where the viewer
 keeps its files, and how to solve common problems.

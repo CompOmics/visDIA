@@ -340,7 +340,9 @@ def modifications(rs: ResultSet) -> tuple[str, ...]:
     """The modification names in the peptidoforms, most frequent first (cached).
 
     About 0.1 s on a single Astral run and 0.2 s on six runs, so the page asks for them
-    after it has loaded.
+    after it has loaded, while the page's table query may run. Only peptidoforms with a
+    bracket or a parenthesis are made distinct (the others carry no modification): a
+    DISTINCT over every peptidoform of an 8.5M-row experiment held a 448 MiB hash table.
     """
     key = _facet_key(rs)
     with _FACET_LOCK:
@@ -350,7 +352,8 @@ def modifications(rs: ResultSet) -> tuple[str, ...]:
     sql = (
         "SELECT m, count(*) AS n FROM (SELECT unnest(regexp_extract_all(peptidoform, "
         r"'\[([^\]]*)\]|\(([^)]*)\)', 1)) AS m FROM (SELECT DISTINCT peptidoform FROM "
-        "read_parquet(?))) WHERE m IS NOT NULL AND m <> '' GROUP BY 1 ORDER BY 2 DESC, 1"
+        "read_parquet(?) WHERE contains(peptidoform, '[') OR contains(peptidoform, '('))) "
+        "WHERE m IS NOT NULL AND m <> '' GROUP BY 1 ORDER BY 2 DESC, 1"
     )
     try:
         rows = rs.duck.execute(sql, [sql_path(rs.scored.require())]).fetchall()

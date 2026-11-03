@@ -29,6 +29,7 @@ mumdia-viewer <run-or-experiment-dir> [--fasta proteins.fasta] [--compare <other
 | `--host` | The address to bind. The default is 127.0.0.1; any other value exposes the viewer to the network. |
 | `--no-token` | Serve at `/` instead of a random path. Use it only on a single-user machine. |
 | `--engine PATH` | A MuMDIA binary (default: the `MUMDIA_BIN` environment variable). On a diaPASEF run the precursor page then reads the raw mobilogram from the `.d` with `mumdia mobilogram`. The desktop application sets `MUMDIA_BIN` to its own engine. |
+| `--memory-limit SIZE` | The memory limit of the viewer's DuckDB databases, for example `8GB`, `1.5GiB` or `50%` of the physical memory (default: the `MUMDIA_VIEWER_MEMORY_LIMIT` environment variable, else a quarter of the physical memory, at least 1 GiB and at most 16 GiB). Each opened result set has its own database, so a comparison uses up to twice the limit. The viewer prints the limit it uses when it starts. |
 
 **On a remote server**, start the viewer with `--no-browser`. Then forward the port:
 `ssh -L <port>:127.0.0.1:<port> <user>@<server>`. Open the printed address, including
@@ -75,6 +76,7 @@ Screenshots: [screenshots/m2](screenshots/m2) and [screenshots/views](screenshot
 | Cache (derived data, safe to delete) | `MUMDIA_VIEWER_CACHE_DIR`, else `%LOCALAPPDATA%\mumdia-viewer` on Windows, `~/Library/Caches/mumdia-viewer` on macOS, `~/.cache/mumdia-viewer` on Linux |
 | Validation notes (your data) | `MUMDIA_VIEWER_NOTES_DIR`, else `%APPDATA%\mumdia-viewer\notes` on Windows, `~/Library/Application Support/mumdia-viewer/notes` on macOS, `~/.local/share/mumdia-viewer/notes` on Linux. There is one JSON file per result set, keyed by the content hash of its scored table. |
 | Browser settings (theme, conditions, expected ratios) | The browser's local storage |
+| DuckDB spill files (while a query needs more than the memory limit) | A private directory under the cache, else under the system's temporary directory; removed when the viewer stops |
 
 ## From Python
 
@@ -91,3 +93,9 @@ The data layer works without the UI, for example in a notebook. See the
   `--remap <old prefix>=<new prefix>`.
 - **The first visit of a page is slower**: the viewer builds indexes and caches, such as
   the MS2 TIC or the candidate index, and keeps them in its cache directory.
+- **"Out of Memory Error" in a table or a card**: a query needed more than the viewer's
+  DuckDB memory limit, which the message states. Start the viewer with a higher limit,
+  `--memory-limit 8GB` (or `50%`), or set `MUMDIA_VIEWER_MEMORY_LIMIT` before it starts;
+  a viewer that the desktop application starts inherits the variable from the
+  application's environment. The limit bounds DuckDB only: the rest of the viewer uses
+  some hundreds of MB more.
