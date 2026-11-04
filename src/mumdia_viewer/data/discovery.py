@@ -666,6 +666,46 @@ def _explain_not_a_result(root: Path) -> str:
     )
 
 
+def retention_of(root: Path, manifest: Manifest) -> dict[str, Any] | None:
+    """What a retention tier removed from the directory, or None when nothing was.
+
+    MuMDIA records ``retention`` in the manifest when it pruned its own output
+    (``output.retain``, ``--retain``); ``scripts/prune_outputs.py`` appends to
+    ``pruned.json`` instead. Returns ``tier``, ``files`` (how many were removed) and
+    ``by`` (``engine`` or ``prune_outputs.py``); the last prune wins.
+    """
+    found: dict[str, Any] | None = None
+    rec = manifest.raw.get("retention")
+    if isinstance(rec, Mapping) and rec.get("tier"):
+        found = {"tier": str(rec["tier"]), "files": len(rec.get("removed") or []), "by": "engine"}
+    pruned = load_json(root / "pruned.json")
+    prunes = pruned.get("prunes") if isinstance(pruned, Mapping) else None
+    if isinstance(prunes, list) and prunes and isinstance(prunes[-1], Mapping):
+        last = prunes[-1]
+        if last.get("tier") and last.get("tier") != "all":
+            files = sum(len(p.get("removed") or []) for p in prunes if isinstance(p, Mapping))
+            files += found["files"] if found else 0
+            found = {"tier": str(last["tier"]), "files": files, "by": "prune_outputs.py"}
+    return found
+
+
+def _retention_notice(b: _Builder, root: Path, manifest: Manifest) -> None:
+    r = retention_of(root, manifest)
+    if r is None:
+        return
+    what = {
+        "viewer": "the first pass's tables of a second-pass experiment and the working files "
+        "were removed; the evidence shown is complete",
+        "results": "only the scores, quantities and reports were kept: chromatograms, "
+        "features, spectra and the other evidence tables are not available",
+    }.get(r["tier"], "some tables were removed")
+    b.notice(
+        "pruned",
+        f"the directory was reduced to the `{r['tier']}` retention tier by "
+        f"{r['by']} ({r['files']} files removed): {what}.",
+    )
+
+
 def _open_single(
     root: Path, manifest: Manifest, remaps, allow_unreleased: bool, cache: Cache, duck: DuckDB
 ) -> ResultSet:
@@ -713,6 +753,7 @@ def _open_single(
             f"the directory was written as {manifest.recorded_out_dir}; paths were "
             f"re-rooted onto {root}.",
         )
+    _retention_notice(b, root, manifest)
     return ResultSet(
         root=root,
         kind="run",
@@ -915,6 +956,7 @@ def _open_experiment(
             f"the directory was written as {manifest.recorded_out_dir}; paths were "
             f"re-rooted onto {root}.",
         )
+    _retention_notice(b, root, manifest)
     return ResultSet(
         root=root,
         kind="experiment",
@@ -985,11 +1027,15 @@ def _second_pass(
                 extra[f"first_pass_library_{name.rsplit('_', 1)[-1]}"] = extra[name]
             extra[name] = found
     if dirs:
+        first = (
+            "the first pass is kept in first_pass/."
+            if (root / "first_pass" / "scored_combined.parquet").is_file()
+            else "the first pass's tables were removed after the run (a retention tier)."
+        )
         b.notice(
             "second_pass",
             "match-between-runs by a second pass: the scores, chromatograms, features and "
-            "library shown are the second pass's (second_pass/); the first pass is kept in "
-            "first_pass/.",
+            f"library shown are the second pass's (second_pass/); {first}",
         )
     return dirs
 
