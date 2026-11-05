@@ -369,3 +369,78 @@ def test_a_second_pass_that_fell_back_changes_nothing(fixture_dir, tmp_path: Pat
     assert (
         rs.extra["fragment_library_precursors"].path == root / "fragment_library_precursors.parquet"
     )
+
+
+_EVIDENCE = (
+    "psms_extracted",
+    "features",
+    "psms_competed",
+    "chromatograms",
+    "run_windows",
+    "seed_psms",
+)
+
+
+def _prune(root: Path, tier: str, *, engine: bool) -> None:
+    """Apply MuMDIA's retention rules (``output.retain``, ``scripts/prune_outputs.py``) to a
+    second-pass experiment: below ``all`` the first pass's evidence tables and
+    ``first_pass/`` go, and under ``results`` also the second pass's evidence and the
+    spectra. Every ``.json`` sidecar stays."""
+    manifest_path = root / "experiment_manifest.json"
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    runs = [str(r) for r in data["experiment"]["runs"]]
+    gone: list[Path] = []
+    for name in runs:
+        dirs = [root / name]
+        if tier == "results":
+            dirs += [root / "second_pass" / name, root / name / "spectra"]
+        for d in dirs:
+            for f in d.iterdir():
+                if not f.is_file() or f.name.endswith(".json"):
+                    continue
+                if d.name == "spectra" or f.name.split(".")[0] in _EVIDENCE:
+                    gone.append(f)
+    fp = root / "first_pass" / "scored_combined.parquet"
+    fp.parent.mkdir(exist_ok=True)
+    gone.append(fp)
+    removed = [{"path": str(p.relative_to(root)).replace(os.sep, "/"), "bytes": 1} for p in gone]
+    for p in gone:
+        p.unlink(missing_ok=True)
+    record = {"tier": tier, "second_pass": True, "removed": removed}
+    if engine:
+        data["retention"] = record
+        manifest_path.write_text(json.dumps(data), encoding="utf-8")
+    else:
+        (root / "pruned.json").write_text(json.dumps({"prunes": [record]}), encoding="utf-8")
+
+
+@pytest.mark.parametrize("engine", [True, False])
+def test_a_viewer_tier_experiment_shows_the_second_pass_evidence(
+    fixture_dir, tmp_path: Path, engine: bool
+):
+    root = _copy(fixture_dir("experiment"), tmp_path / "exp")
+    _make_second_pass(root, applied=True)
+    _prune(root, "viewer", engine=engine)
+    rs = open_results(root)
+    assert "pruned" in rs.notice_codes()
+    note = next(n.message for n in rs.notices if n.code == "second_pass")
+    assert "removed after the run" in note, note
+    for run in rs.runs:
+        for kind in _EVIDENCE:
+            assert run.has(kind), kind
+            assert run.artifacts[kind].path.parent == root / "second_pass" / run.name
+        assert run.has("spectra_ms2") and run.has("psms_scored")
+
+
+def test_a_results_tier_experiment_opens_with_scores_and_quantities(fixture_dir, tmp_path: Path):
+    root = _copy(fixture_dir("experiment"), tmp_path / "exp")
+    _make_second_pass(root, applied=True)
+    _prune(root, "results", engine=True)
+    rs = open_results(root)
+    assert "pruned" in rs.notice_codes()
+    assert "not available" in next(n.message for n in rs.notices if n.code == "pruned")
+    for run in rs.runs:
+        assert run.has("psms_scored") and run.has("peptide_quant")
+        for kind in (*_EVIDENCE, "spectra_ms2"):
+            assert not run.has(kind), kind
+        assert "cal" in run.side_files
