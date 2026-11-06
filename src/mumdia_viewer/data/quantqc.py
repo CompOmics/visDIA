@@ -145,9 +145,15 @@ def run_files(rs: ResultSet) -> dict[str, str | None]:
 
     A single run records its file as ``mzml`` (or ``mzml[0]``), an experiment as
     ``mzml[<i>]``, where ``i`` is the run's source index (the order of
-    ``experiment.runs``). Only the file name is returned, not the directory.
+    ``experiment.runs``). An experiment whose run names MuMDIA derived from its inputs
+    (0.10 and later) also records ``experiment.run_inputs``, the input as given: the vendor
+    file of a converted run rather than its mzML, which is preferred. Only the file name is
+    returned, not the directory.
     """
     by_index: dict[int, str] = {}
+    for entry in (getattr(rs.manifest, "experiment", None) or {}).get("run_inputs") or []:
+        if isinstance(entry, dict) and entry.get("input") and entry.get("source") is not None:
+            by_index.setdefault(int(entry["source"]), str(entry["input"]))
     for key, record in rs.manifest.inputs.items():
         m = _MZML_KEY.match(str(key))
         if m is None or not record.path:
