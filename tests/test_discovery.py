@@ -444,3 +444,12 @@ def test_a_results_tier_experiment_opens_with_scores_and_quantities(fixture_dir,
         for kind in (*_EVIDENCE, "spectra_ms2"):
             assert not run.has(kind), kind
         assert "cal" in run.side_files
+
+
+def test_run_names_without_a_runs_list_sort_by_index_then_name():
+    # Manifests without `experiment.runs` come from releases that named the runs r0, r1, ...;
+    # r10 sorts after r2. MuMDIA 0.10 names the runs after their inputs and lists them.
+    from mumdia_viewer.data.discovery import _run_order
+
+    names = ["r10", "r2", "HYE_B01", "r1", "r0", "A0_1EX8741FD"]
+    assert sorted(names, key=_run_order) == ["r0", "r1", "r2", "r10", "A0_1EX8741FD", "HYE_B01"]

@@ -596,3 +596,20 @@ def test_find_groups_ranks_exact_and_prefix_matches(open_fixture):
     assert Q.find_groups(rs, "FIXT01|FIX01_TEST") == ["sp|FIXT01|FIX01_TEST"]
     assert Q.find_groups(rs, "no such protein") == []
     assert Q.find_groups(rs, "", accepted_at=0.01) == []
+
+
+def test_run_files_prefer_the_recorded_input_of_a_derived_run_name():
+    # MuMDIA 0.10 records the input as given under experiment.run_inputs: the vendor file of a
+    # converted run, where inputs["mzml[i]"] holds the mzML converted from it.
+    rs = _stub(["/out/A0_1EX8741FD.mzML", "/out/A0_2EX8742FD.mzML"])
+    rs.manifest.experiment = {
+        "run_inputs": [
+            {
+                "name": "A0_1EX8741FD",
+                "source": 0,
+                "input": "/raw/A0_1EX8741FD.raw",
+                "converted": "/out/A0_1EX8741FD.mzML",
+            },
+        ]
+    }
+    assert Q.run_files(rs) == {"r0": "A0_1EX8741FD.raw", "r1": "A0_2EX8742FD.mzML"}

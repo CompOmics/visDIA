@@ -770,6 +770,20 @@ def _open_single(
     )
 
 
+_INDEX_RUN = re.compile(r"^r(\d+)$")
+
+
+def _run_order(name: str) -> tuple[int, int, str]:
+    """Sort key of a run name when the manifest does not list ``experiment.runs``.
+
+    MuMDIA named the runs of an experiment ``r0``, ``r1``, ... until 0.10, which names them
+    after their input files and always lists them; ``r10`` must come after ``r2``, not
+    between ``r1`` and ``r2``. Any other name sorts after those, by itself.
+    """
+    m = _INDEX_RUN.match(name)
+    return (0, int(m.group(1)), "") if m else (1, 0, name)
+
+
 def _open_experiment(
     root: Path, manifest: Manifest, remaps, allow_unreleased: bool, cache: Cache, duck: DuckDB
 ) -> ResultSet:
@@ -779,7 +793,8 @@ def _open_experiment(
     run_names = [str(r) for r in (exp.get("runs") or [])]
     if not run_names:
         run_names = sorted(
-            {q for k in records for base, q in [split_key(k)] if base == "scored" and q}
+            {q for k in records for base, q in [split_key(k)] if base == "scored" and q},
+            key=_run_order,
         )
     per_run: dict[str, dict[str, ArtifactRecord]] = {}
     top: dict[str, ArtifactRecord] = {}
