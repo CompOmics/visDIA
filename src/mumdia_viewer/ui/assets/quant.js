@@ -36,8 +36,15 @@
       // The editor and the store mv-conditions ({run name: condition}, localStorage)
       // follow each other. An empty or missing value of a run means its suggestion.
       // Typing writes the store (the inputs keep what was typed); the reset button
-      // removes this result set's runs from the store; the first call and a store
-      // changed elsewhere set the inputs.
+      // removes this result set's runs from the store; the first call sets the inputs
+      // from the store.
+      //
+      // The first call is the one in which qq-suggest fired. When the page is built
+      // (opened, reopened from another page, reloaded) Dash lists every input of the
+      // new page in `triggered`: the reset button with n_clicks 0 and the editor's
+      // inputs, which then hold the suggestions (quant_cards). qq-suggest is part of
+      // the layout and changes only then, so that call is a load: taken as a reset or
+      // as typing it would clear or overwrite the stored conditions.
       conditions: function (values, reset, suggest, stored, ids, palette) {
         const runs = (ids || []).map(function (i) {
           return i.run;
@@ -46,10 +53,28 @@
         palette = palette && palette.length ? palette : ["#4c6ef5"];
         const base = stored && typeof stored === "object" ? stored : {};
         const fired = triggered();
+        const has = function (test) {
+          return fired.some(test);
+        };
+        const initial = has(function (p) {
+          return p.indexOf("qq-suggest") === 0;
+        });
+        const resetting =
+          !initial &&
+          Number(reset) > 0 &&
+          has(function (p) {
+            return p.indexOf("qq-cond-reset") === 0;
+          });
+        const typing =
+          !initial &&
+          !resetting &&
+          has(function (p) {
+            return p.indexOf('"type":"qq-cond"') >= 0;
+          });
         let store = NO();
         let inputs = runs.map(NO);
         let current;
-        if (fired.some(function (p) { return p.indexOf("qq-cond-reset") === 0; })) {
+        if (resetting) {
           const next = Object.assign({}, base);
           runs.forEach(function (r) {
             delete next[r];
@@ -59,7 +84,7 @@
             return suggest[r] || "";
           });
           inputs = current.slice();
-        } else if (fired.some(function (p) { return p.indexOf('"type":"qq-cond"') >= 0; })) {
+        } else if (typing) {
           const next = Object.assign({}, base);
           runs.forEach(function (r, i) {
             next[r] = clean((values || [])[i]) || suggest[r] || "";
