@@ -604,8 +604,12 @@ def test_run_files_prefer_the_recorded_input_of_a_derived_run_name():
     rs = _stub(["/out/A0_1EX8741FD.mzML", "/out/A0_2EX8742FD.mzML"])
     rs.manifest.experiment = {
         "run_inputs": [
-            {"name": "A0_1EX8741FD", "source": 0, "input": "/raw/A0_1EX8741FD.raw",
-             "converted": "/out/A0_1EX8741FD.mzML"},
+            {
+                "name": "A0_1EX8741FD",
+                "source": 0,
+                "input": "/raw/A0_1EX8741FD.raw",
+                "converted": "/out/A0_1EX8741FD.mzML",
+            },
         ]
     }
     assert Q.run_files(rs) == {"r0": "A0_1EX8741FD.raw", "r1": "A0_2EX8742FD.mzML"}
