@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import json
+import shutil
+import socket
+import subprocess
+import threading
+from pathlib import Path
 
 import numpy as np
 import plotly.graph_objects as go
@@ -246,3 +251,202 @@ def test_short_file_names():
 def test_protein_href():
     assert quant.protein_href("/t/", "ATLA3_HUMAN") == "/t/protein?group=ATLA3_HUMAN"
     assert quant.protein_href("/t/", None) == "/t/protein"
+
+
+# --------------------------------------------------------------------------- the condition editor
+
+QUANT_JS = Path(quant.__file__).parent / "assets" / "quant.js"
+NODE = shutil.which("node")
+
+# mvq.conditions with a fake callback_context: each case names the inputs Dash lists in
+# `triggered` and the arguments of the call; the answer comes back as JSON.
+NODE_TEST = r"""
+const fs = require('fs');
+global.window = { dash_clientside: {} };
+global.document = { addEventListener: () => {} };
+eval(fs.readFileSync(process.argv[2], 'utf8'));
+window.dash_clientside.no_update = 'NO_UPDATE';
+const cases = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+const out = cases.map((c) => {
+  window.dash_clientside.callback_context = {
+    triggered: c.fired.map((p) => ({ prop_id: p, value: null })),
+  };
+  const ids = c.runs.map((r) => ({ type: 'qq-cond', run: r }));
+  const [store, inputs, styles, text] = window.dash_clientside.mvq.conditions(
+    c.values, c.reset, c.suggest, c.stored, ids, ['#111', '#222']);
+  return { store, inputs, text, styles: styles.map((s) => s.background) };
+});
+process.stdout.write(JSON.stringify(out));
+"""
+
+RUNS = ["a", "b"]
+SUGGEST = {"a": "fixture", "b": "b"}
+COND = [json.dumps({"run": r, "type": "qq-cond"}, separators=(",", ":")) + ".value" for r in RUNS]
+# What Dash lists in `triggered` when the page is built (CompOmics/MuMDIA#283).
+PAGE_BUILD = ["qq-suggest.data", *COND, "qq-cond-reset.n_clicks"]
+
+
+def _conditions(tmp_path, cases):
+    path = tmp_path / "cases.json"
+    path.write_text(json.dumps(cases), encoding="utf-8")
+    script = tmp_path / "test.js"
+    script.write_text(NODE_TEST, encoding="utf-8")
+    run = subprocess.run(
+        [NODE, str(script), str(QUANT_JS), str(path)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr[-2000:]
+    return json.loads(run.stdout)
+
+
+@pytest.mark.skipif(NODE is None, reason="Node is not installed")
+def test_condition_editor_keeps_the_stored_conditions_across_a_page_build(tmp_path):
+    """The page build is a load: it neither resets nor rewrites the stored conditions."""
+
+    def case(fired, values, reset, stored):
+        return {
+            "fired": fired,
+            "values": values,
+            "reset": reset,
+            "suggest": SUGGEST,
+            "stored": stored,
+            "runs": RUNS,
+        }
+
+    mine = {"a": "Treated", "b": "b", "other": "Kept"}
+    first, typed, rebuilt, reset, built_after_reset, idle = _conditions(
+        tmp_path,
+        [
+            # 1. Opened with nothing stored: the suggestions, the store untouched.
+            case(PAGE_BUILD, ["fixture", "b"], 0, None),
+            # 2. Typing in run a writes the store; the inputs keep what was typed.
+            case([COND[0]], ["Treated", "b"], 0, {"other": "Kept"}),
+            # 3. The page built again (another page and back, or a reload): the inputs
+            #    hold the suggestions and the reset button n_clicks 0, all in `triggered`.
+            case(PAGE_BUILD, ["fixture", "b"], 0, mine),
+            # 4. "Use the suggestion": this result set's runs leave the store.
+            case(["qq-cond-reset.n_clicks"], ["Treated", "b"], 1, mine),
+            # 5. A rebuild after a reset is a load as well, not a second reset.
+            case(PAGE_BUILD, ["fixture", "b"], 0, {"other": "Kept"}),
+            # 6. A reset button at n_clicks 0 never resets.
+            case(["qq-cond-reset.n_clicks"], ["fixture", "b"], 0, mine),
+        ],
+    )
+    assert first["store"] == "NO_UPDATE" and first["inputs"] == ["fixture", "b"]
+    assert first["text"].startswith("Suggested from the mzML file names")
+    assert first["text"].endswith("2 conditions")
+
+    assert typed["store"] == {"a": "Treated", "b": "b", "other": "Kept"}
+    assert typed["inputs"] == ["NO_UPDATE", "NO_UPDATE"]
+    assert typed["text"].startswith("Your conditions, kept in this browser")
+
+    assert rebuilt["store"] == "NO_UPDATE"
+    assert rebuilt["inputs"] == ["Treated", "b"]
+    assert rebuilt["text"].startswith("Your conditions, kept in this browser")
+    assert rebuilt["styles"] == ["#111", "#222"]
+
+    assert reset["store"] == {"other": "Kept"} and reset["inputs"] == ["fixture", "b"]
+    assert reset["text"].startswith("Suggested from the mzML file names")
+
+    assert built_after_reset["store"] == "NO_UPDATE"
+    assert built_after_reset["inputs"] == ["fixture", "b"]
+
+    assert idle["store"] == "NO_UPDATE" and idle["inputs"] == ["Treated", "b"]
+
+
+def _chromium():
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+    try:
+        with sync_playwright() as p:
+            p.chromium.launch().close()
+    except Exception:
+        return None
+    return sync_playwright
+
+
+SYNC_PLAYWRIGHT = _chromium()
+
+
+@pytest.mark.skipif(SYNC_PLAYWRIGHT is None, reason="Chromium for playwright is not installed")
+def test_condition_editor_in_chromium(open_fixture):
+    """The scenario of CompOmics/MuMDIA#283: edit, leave, come back, reload, reset."""
+    from werkzeug.serving import make_server
+
+    rs = open_fixture("experiment")
+    runs = [r.name for r in rs.runs]
+    suggestion = Q.suggest_conditions(rs)
+    suggested = [suggestion.get(r, "") for r in runs]
+    app = create_app(rs, url_base="/")
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    server = make_server("127.0.0.1", port, app.server, threaded=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{port}"
+    inputs_js = "() => Array.from(document.querySelectorAll('.qq-cond-input input'), e => e.value)"
+    stored_js = "() => JSON.parse(window.localStorage.getItem('mv-conditions'))"
+    state_js = "() => (document.getElementById('qq-cond-state') || {}).innerText || ''"
+    edited = ["Treated", *suggested[1:]]
+    mine = dict(zip(runs, edited, strict=True))
+    try:
+        with SYNC_PLAYWRIGHT() as p:
+            chromium = p.chromium.launch()
+            page = chromium.new_page(viewport={"width": 1440, "height": 900})
+            errors: list[str] = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+
+            def editor(want, own, timeout=30000):
+                """Wait until the inputs hold `want` and the status line names its source."""
+                page.wait_for_function(
+                    f"(w) => JSON.stringify(({inputs_js})()) === JSON.stringify(w)",
+                    arg=want,
+                    timeout=timeout,
+                )
+                head = "Your conditions" if own else "Suggested from the mzML file names"
+                page.wait_for_function(
+                    f"(h) => ({state_js})().startsWith(h)", arg=head, timeout=timeout
+                )
+                # Let any later callback answer before the state is read again.
+                page.wait_for_timeout(700)
+                assert page.evaluate(inputs_js) == want
+
+            # 1. Opened: the suggestions, nothing stored.
+            page.goto(base + "/quant")
+            editor(suggested, own=False)
+            assert page.evaluate(stored_js) is None
+            # 2. The first run edited: the store follows (after the input's debounce).
+            page.locator(".qq-cond-input input").first.fill("Treated")
+            page.wait_for_function(
+                f"(w) => JSON.stringify(({stored_js})()) === JSON.stringify(w)",
+                arg=mine,
+                timeout=10000,
+            )
+            editor(edited, own=True)
+            # 3. Another page (in-app link): no editor, the store kept.
+            page.locator(".mv-brand").click()
+            page.wait_for_function(f"() => ({inputs_js})().length === 0", timeout=30000)
+            page.wait_for_timeout(500)
+            assert page.evaluate(stored_js) == mine
+            # 4. Back on Quant QC (in-app link): the stored conditions, not the suggestions.
+            page.locator("#nav-quant").click()
+            editor(edited, own=True)
+            assert page.evaluate(stored_js) == mine
+            # 5. A reload: the same.
+            page.reload()
+            editor(edited, own=True)
+            assert page.evaluate(stored_js) == mine
+            # 6. "Use the suggestion": the suggestions, this result set's runs unstored.
+            page.locator("#qq-cond-reset").click()
+            editor(suggested, own=False)
+            assert page.evaluate(stored_js) == {}
+            assert errors == []
+            chromium.close()
+    finally:
+        server.shutdown()
