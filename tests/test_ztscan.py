@@ -634,7 +634,7 @@ def _real_zt() -> Path:
 @pytest.mark.real_data
 def test_real_zt_run_cycle_traces_and_patch():
     """On a MuMDIA ZT Scan run: every accepted target sampled has cycle traces whose cycles
-    ascend, and a patch whose expected centre lies inside the cells read."""
+    ascend, and a patch of the steps within the window's reach of its expected centre."""
     rs = open_results(_real_zt())
     run = rs.runs[0]
     assert run.is_ztscan
@@ -650,4 +650,8 @@ def test_real_zt_run_cycle_traces_and_patch():
         for t in ct.fragments:
             assert np.all(np.diff(t.cycles) >= 1)
         p = zt.q1_patch(rs, d)
-        assert p.targets[0] < p.centre_mz < p.targets[-1]
+        # The steps within the window's reach of the expected centre; at the ends of the
+        # sweep the centre itself can lie outside the scanned targets.
+        reach = p.cand.model.reach_mz + p.cand.model.margin_steps * p.step_mz
+        assert p.steps.size and np.all(np.abs(p.targets - p.centre_mz) <= reach + 1e-9)
+        assert np.isfinite(p.values).any()
