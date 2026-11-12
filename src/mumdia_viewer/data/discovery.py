@@ -33,8 +33,15 @@ from .duck import DuckDB
 from .errors import LayoutError, NotAResultDirectory, SchemaVersionError, ViewerError
 from .manifest import ArtifactRecord, Manifest, band_index, load_manifest, split_key
 from .paths import PathResolver
+from .pqio import ParquetHandle
 from .reports import Report, StageTiming, load_json, load_report, stage_timings
-from .schemas import DIAPASEF, VersionInfo, check_version
+from .schemas import (
+    DIAPASEF,
+    ZTSCAN_MARKERS,
+    VersionInfo,
+    check_version,
+    is_ztscan_version,
+)
 
 # Fixed file names of the artifacts in a run directory (relative to the run root).
 RUN_FILES: dict[str, str] = {
@@ -92,6 +99,20 @@ SIDE_FILES: dict[str, str] = {
 
 PEAKS_SIDECAR = "psms_extracted.parquet.peaks.parquet"
 _TMP = re.compile(r"\.tmp-\d+-\d+")
+
+
+def _columns_of(artifact: Artifact, version: int | None) -> list[str] | None:
+    """The column names of a present parquet artifact, read only for a version whose number
+    two engine lines share (``schemas.ZTSCAN_MARKERS``); None otherwise, when absent or
+    unreadable. Every other version is decided without reading the footer."""
+    if (artifact.kind, version) not in ZTSCAN_MARKERS:
+        return None
+    if not artifact.present or artifact.path is None:
+        return None
+    try:
+        return list(ParquetHandle(artifact.path).schema.names)
+    except Exception:
+        return None
 
 
 @dataclass(frozen=True)
@@ -156,6 +177,19 @@ class Run:
     def has(self, kind: str) -> bool:
         a = self.artifacts.get(kind)
         return a is not None and a.usable
+
+    @property
+    def is_ztscan(self) -> bool:
+        """True when the run is a SCIEX ZT Scan DIA run read with its Q1 sweep: its
+        ``spectra_ms2`` is the ZT Scan version 3, with ``q1_cycle`` and ``q1_step``."""
+        a = self.artifacts.get("spectra_ms2")
+        if a is None or not a.usable or a.version.version is None:
+            return False
+        try:
+            names = a.parquet().schema.names  # the footer is read once per file version
+        except ViewerError:
+            return False
+        return is_ztscan_version("spectra_ms2", a.version.version, names)
 
     @property
     def has_im(self) -> bool:
@@ -397,6 +431,7 @@ class _Builder:
                         rec.schema_version,
                         where=where,
                         allow_unreleased=self.allow_unreleased,
+                        columns=_columns_of(artifact, rec.schema_version),
                     )
                 except SchemaVersionError as exc:
                     artifact.error = str(exc)
@@ -420,6 +455,7 @@ class _Builder:
                     artifact.version.version,
                     where=where,
                     allow_unreleased=self.allow_unreleased,
+                    columns=_columns_of(artifact, artifact.version.version),
                 )
             except SchemaVersionError as exc:
                 artifact.error = str(exc)

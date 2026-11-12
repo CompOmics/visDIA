@@ -115,7 +115,8 @@ def trace_columns(layout: ChromatogramLayout) -> tuple[str, ...]:
 
 
 def _read_columns(layout: ChromatogramLayout) -> list[str]:
-    return [*SCALAR_COLUMNS, *trace_columns(layout)]
+    extra = ["q1_class"] if layout.q1_traces else []
+    return [*SCALAR_COLUMNS, *extra, *trace_columns(layout)]
 
 
 # --------------------------------------------------------------------------- traces
@@ -141,6 +142,9 @@ class Trace:
     intensity: np.ndarray
     im: np.ndarray | None
     trace_len: int
+    # ZT Scan cycle-level traces (chromatograms v5/v6): the engine's Q1 class of the row
+    # (0 absent, 1 belongs, 2 interfered; None on an MS1 row and on every other layout).
+    q1_class: int | None = None
 
     @property
     def is_ms1(self) -> bool:
@@ -501,6 +505,8 @@ def _part_traces(part: pa.Table, layout: ChromatogramLayout, cid: int, where: st
         else list(frag_mz)
     )
     predicted = part.column("predicted_intensity").to_numpy().tolist()
+    q1 = part.column("q1_class").to_pylist() if "q1_class" in names_present else [None] * n
+    q1 = [None if v is None or v != v else int(v) for v in q1]
     return [
         Trace(
             frag_name=names[k] if names[k] is not None else "",
@@ -511,6 +517,7 @@ def _part_traces(part: pa.Table, layout: ChromatogramLayout, cid: int, where: st
             intensity=it,
             im=im,
             trace_len=int(rt.size),
+            q1_class=q1[k],
         )
         for k, (rt, it, im) in enumerate(decoded)
     ]

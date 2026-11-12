@@ -765,7 +765,26 @@ def _key(label: str, value: str, text: str, kind: str, colour: str) -> Any:
     )
 
 
-def marker_key(d: PrecursorDetail, xr: dict[str, Any]) -> Any:
+# ZT Scan runs: what the XIC's apex and bounds are, and the Q1 classes (detail_figures).
+ZT_APEX_TEXT = (
+    "apex_rt of the scored row, the engine's column: the RT of one MS2 spectrum, the apex "
+    "step of the apex Q1 cycle. The cycle trace's points sit at the mean RT of their cycle's "
+    "steps, so the apex line can sit a few ms off the cycle's point."
+)
+ZT_ELUTION_TEXT = (
+    "elution_lo and elution_hi of the scored row, the engine's columns: the identification's "
+    "bounds, at the RTs of single spectra (Q1 steps)"
+)
+ZT_CLASS_TEXT = (
+    "The engine's per-fragment Q1 decision (q1f_frag_class of psms_extracted), drawn by line "
+    "and marker, the colour stays the fragment's. Solid, filled circle: belongs (its own Q1 "
+    "centre is where the calibrated window puts the precursor and it co-elutes in RT x Q1). "
+    "Dashed, \u2717: interfered (present, but centred elsewhere in Q1 or not co-eluting: another "
+    "precursor's signal at this m/z). Dotted, \u25cb: absent."
+)
+
+
+def marker_key(d: PrecursorDetail, xr: dict[str, Any], zt: Any = None) -> Any:
     m = d.markers
     items = []
     if m.get("elution_lo") is not None:
@@ -773,14 +792,22 @@ def marker_key(d: PrecursorDetail, xr: dict[str, Any]) -> Any:
             _key(
                 "elution",
                 interval(m.get("elution_lo"), m.get("elution_hi"), digits=1),
-                "elution_lo and elution_hi of the scored row: the identification's bounds",
+                ZT_ELUTION_TEXT
+                if zt is not None
+                else "elution_lo and elution_hi of the scored row: the identification's bounds",
                 "band",
                 "#2f9e44",
             )
         )
     if m.get("apex_rt") is not None:
         items.append(
-            _key("apex", rt_text(m.get("apex_rt")), "apex_rt of the scored row", "solid", "#2f9e44")
+            _key(
+                "apex",
+                rt_text(m.get("apex_rt")),
+                ZT_APEX_TEXT if zt is not None else "apex_rt of the scored row",
+                "solid",
+                "#2f9e44",
+            )
         )
     if m.get("integration_lo_rt") is not None:
         items.append(
@@ -788,7 +815,8 @@ def marker_key(d: PrecursorDetail, xr: dict[str, Any]) -> Any:
                 "integration",
                 interval(m.get("integration_lo_rt"), m.get("integration_hi_rt"), digits=1),
                 "integration_lo_rt and integration_hi_rt of peptide_quant: what quant "
-                f"integrated (integration apex {rt_text(m.get('integration_apex_rt'))})",
+                f"integrated (integration apex {rt_text(m.get('integration_apex_rt'))})"
+                + (zt_quant_text(d) if zt is not None else ""),
                 "box",
                 "#7048e8",
             )
@@ -834,17 +862,72 @@ def marker_key(d: PrecursorDetail, xr: dict[str, Any]) -> Any:
                 "#f08c00",
             )
         )
+    if zt is not None:
+        items.append(
+            _key(
+                "cycle trace",
+                "derived" if zt.has_steps else "engine",
+                ZT_CYCLE_KEY
+                + " "
+                + zt.label
+                + "."
+                + ("" if zt.collapsed else " " + "; ".join(zt.notes)),
+                "solid",
+                "#868e96",
+            )
+        )
+        if zt.classes:
+            n = {k: sum(1 for v in zt.classes.values() if v == k) for k in (1, 2, 0)}
+            items.append(
+                _key(
+                    "Q1 class",
+                    f"{n[1]} belong · {n[2]} interfered · {n[0]} absent",
+                    ZT_CLASS_TEXT,
+                    "dash",
+                    "#868e96",
+                )
+            )
     items.append(
         _key(
             "shown scan",
             "",
             "the MS2 scan in the mirror: click the plot, drag the slider, use the buttons or "
-            "the arrow keys",
+            "the arrow keys"
+            + (
+                "; on a ZT Scan run a click on a cycle shows the cycle's middle step"
+                if zt is not None
+                else ""
+            ),
             "scan",
             "#4263eb",
         )
     )
     return html.Div(items, className="pd-keys")
+
+
+ZT_CYCLE_KEY = (
+    "One value per Q1 cycle: the quadrupole sweeps the precursor through five to seven "
+    "steps of every cycle, each a spectrum at its own transmission, so the steps of a cycle "
+    "are collapsed to one value, the fragment's intensity at full transmission."
+)
+
+
+def zt_quant_text(d: PrecursorDetail) -> str:
+    """How quant chose its window on a ZT Scan run (``params.q1_cycle_window`` of the
+    peptide_quant report), when recorded."""
+    art = d.run.artifact("peptide_quant")
+    params = art.report.params if art is not None and art.report is not None else {}
+    w = params.get("q1_cycle_window")
+    if not isinstance(w, dict):
+        return ". On this ZT Scan run quant integrated the per-step samples."
+    cycles = w.get("cycles", w.get("q1_cycle_halfwidth"))
+    applied = w.get("applied")
+    if cycles and applied is not False:
+        return (
+            f". On this ZT Scan run quant integrated the per-step samples over {cycles} Q1 "
+            "cycles either side (quant.q1_cycle_halfwidth, the engine's window)."
+        )
+    return ". On this ZT Scan run quant integrated the per-step samples."
 
 
 def scrub_params(grid: view.ScanGrid | None, rng: Any) -> dict[str, Any] | None:
@@ -874,6 +957,13 @@ def scrub_params(grid: view.ScanGrid | None, rng: Any) -> dict[str, Any] | None:
     apex = grid.apex_index
     marks = [{"value": apex, "label": "apex"}] if apex is not None and i0 <= apex <= i1 else []
     return {"min": i0, "max": i1, "style": style, "marks": marks}
+
+
+ZT_VIEWS = [
+    {"value": "cycles", "label": "Cycles"},
+    {"value": "both", "label": "Cycles + steps"},
+    {"value": "steps", "label": "Steps"},
+]
 
 
 def xic_views(d: PrecursorDetail, grid: view.ScanGrid | None) -> dict[str, Any]:
@@ -971,14 +1061,20 @@ def xic_card(
     grid: view.ScanGrid | None,
     key: str | None = None,
     views: dict[str, Any] | None = None,
+    zt: Any = None,
+    zt_why: str | None = None,
 ) -> Any:
     views = views or xic_views(d, grid)
-    fig = dfig.xic_figure(d, frags, grid, ctx.scheme, key=key, view=views["view"])
+    fig = dfig.xic_figure(d, frags, grid, ctx.scheme, key=key, view=views["view"], zt=zt)
     xr = dfig.x_range(d, grid)
     n_obs = sum(1 for f in frags if f.observed)
     sub = f"{n_obs} of {len(frags)} predicted fragments observed"
     if grid is not None and grid.size:
         sub += f" in {grid.size} grid scans"
+    if zt is not None and zt.collapsed:
+        n_cyc = max((t.cycles.size for t in zt.fragments), default=0)
+        who = "viewer-derived" if zt.has_steps else "the engine's cycle-level trace"
+        sub += f" ({n_cyc} Q1 cycles; one value per cycle, {who})"
     qf = d.quant_fragments
     if qf is not None and qf.available:
         sub += f"; {qf.n_selected} used for the quantity"
@@ -990,6 +1086,15 @@ def xic_card(
         "a fragment in both plots; double click to show it alone. Hover a trace to find the "
         "fragment in the spectrum, on the sequence and in the tables."
     )
+    if zt is not None:
+        help_ += (
+            " ZT Scan run: Cycles shows one value per Q1 cycle (the transmission-weighted "
+            "collapse of the cycle's steps), Cycles + steps adds the per-step samples faint "
+            "behind it, Steps shows the samples alone. Each fragment's line and marker give "
+            "the engine's Q1 class."
+        )
+    elif zt_why:
+        help_ += f" ZT Scan run, shown per step: {zt_why}."
     axis = dmc.SegmentedControl(
         id="pd-xic-axis",
         data=[{"value": "linear", "label": "Linear"}, {"value": "log", "label": "Log"}],
@@ -1035,9 +1140,25 @@ def xic_card(
             f"of 2.5 peak widths. Whole window: {span[0]:.1f} to {span[1]:.1f} s.",
             w=300,
         )
+    zt_switch = None
+    if zt is not None and zt.collapsed and zt.has_steps:
+        zt_switch = tip(
+            dmc.SegmentedControl(
+                id="pd-xic-zt",
+                data=ZT_VIEWS,
+                value="cycles",
+                size="xs",
+                radius="xl",
+                color="teal",
+            ),
+            "ZT Scan run. Cycles: one value per Q1 cycle (" + zt.label + "). Cycles + steps: "
+            "the per-step samples of the chromatogram faint behind it. Steps: the samples "
+            "alone, as on any other run.",
+            w=360,
+        )
     return card(
         "Fragment and MS1 XICs",
-        marker_key(d, xr),
+        marker_key(d, xr, zt),
         html.Div(
             [
                 graph("pd-xic", fig),
@@ -1053,7 +1174,11 @@ def xic_card(
         ),
         _scrubber(grid, views),
         dcc.Store(id="pd-xview", data=views),
-        right=dmc.Group([quant_switch, view_switch, axis], gap=6, wrap="nowrap"),
+        right=dmc.Group(
+            [c for c in (zt_switch, quant_switch, view_switch, axis) if c is not None],
+            gap=6,
+            wrap="nowrap",
+        ),
         subtitle=sub,
         help=help_,
         count=len(frags),

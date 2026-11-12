@@ -30,6 +30,13 @@ re-roots those paths onto the copy (this also tests moved-directory support).
 fixed scan window and the configuration of that branch's smoke test; every other file of
 those arms was byte-identical to the same build without the key.
 
+The SCIEX ZT Scan DIA tests (`tests/test_ztscan.py`) use a synthetic run that
+`tests/ztscan_fixture.py` writes into a temporary directory at test time, not a committed
+fixture: `spectra_ms2` v3 with a 60-step Q1 sweep, `cal.json` with the Q1 calibration,
+`psms_extracted` v6 and per-step chromatograms (or, with `cycle_traces=True`, the engine's
+cycle-level chromatograms v5 and `psms_extracted` v9), with the signal planted through the
+calibrated transmission at known amplitudes.
+
 `tools/` holds the fixture generators (derived from `ci/make_fixture_mzml.py` of the
 MuMDIA repository, Apache-2.0) and the configurations used. The smoke fixtures are
 regenerated with `MUMDIA_BIN=<mumdia> PYTHON=python bash ci/smoke.sh <work>` in a MuMDIA

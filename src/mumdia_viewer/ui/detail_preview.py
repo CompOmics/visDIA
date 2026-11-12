@@ -22,6 +22,7 @@ from . import detail_cards as cards
 from . import detail_figures as dfig
 from . import detail_ions as ions
 from . import detail_view as view
+from . import detail_ztscan as ztc
 from .icons import icon
 from .state import PageContext, href
 from .widgets import chip, graph, peptidoform, spark_bar
@@ -197,7 +198,8 @@ def preview_card(
     scheme = ctx.scheme
     n_obs = sum(1 for f in frags if f.observed)
     ladder = view.ion_ladder(d.scored.get("peptidoform"), frags, m)
-    xic = dfig.xic_figure(d, frags, grid, scheme, compact=True, height=XIC_HEIGHT)
+    zt, _ = ztc.zt_traces(ctx.rs, d)
+    xic = dfig.xic_figure(d, frags, grid, scheme, compact=True, height=XIC_HEIGHT, zt=zt)
     spec = dfig.spectrum_figure(m, frags, scheme, height=spectrum_height(ladder), why_empty=why)
     if m is not None:
         p = m.pick

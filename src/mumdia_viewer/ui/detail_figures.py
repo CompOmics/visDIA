@@ -74,6 +74,26 @@ QF_STYLE: dict[str, dict[str, tuple[float, float, bool]]] = {
 }
 QF_FILL_ALPHA = 0.22
 
+# ZT Scan runs (mumdia_viewer.data.ztscan): what the XIC draws of each trace, per mode.
+# ``cycles`` (the default) draws one value per Q1 cycle; ``both`` adds the per-step samples
+# faint behind it; ``steps`` draws the samples alone, as on any other run. detail.js
+# (`mvd.zt`) holds the same table: per mode, (cycle trace shown, step trace shown, step
+# opacity, step trace drawn with lines).
+ZT_MODES = ("cycles", "both", "steps")
+ZT_STYLE: dict[str, tuple[bool, bool, float, bool]] = {
+    "cycles": (True, False, 0.45, False),
+    "both": (True, True, 0.45, False),
+    "steps": (False, True, 1.0, True),
+}
+# The engine's Q1 class of a fragment (q1f_frag_class) as a line dash, a marker and a
+# legend tag: a class is never told by colour alone, the colour stays the fragment's.
+Q1_CLASS_STYLE: dict[int, tuple[str, str, str]] = {
+    1: ("solid", "circle", ""),
+    2: ("dash", "x-thin-open", " ✗"),
+    0: ("dot", "circle-open", " ○"),
+}
+Q1_CLASS_WORD = {0: "absent", 1: "belongs", 2: "interfered"}
+
 
 def _rgba(colour: str, alpha: float) -> str:
     c = colour.lstrip("#")
@@ -251,6 +271,8 @@ def xic_figure(
     key: str | None = None,
     view: str = "peak",
     quant_mode: str | None = None,
+    zt: Any = None,
+    zt_mode: str = "cycles",
 ) -> go.Figure:
     """Fragment XICs (top) and MS1 isotope XICs (bottom) on one shared RT axis.
 
@@ -276,7 +298,27 @@ def xic_figure(
     marks the fragments quant used for the quantity, when the precursor has a fragment
     account: thicker traces with their area over the integration window filled, the other
     fragments dimmed (``highlight``) or hidden (``only``). See :data:`QF_STYLE`.
+
+    ``zt`` (:class:`mumdia_viewer.data.ztscan.CycleTraces`, ZT Scan runs only) draws each
+    trace as one value per Q1 cycle, the per-step samples faint behind it or alone
+    (``zt_mode``, :data:`ZT_STYLE`), and marks each fragment's Q1 class
+    (:data:`Q1_CLASS_STYLE`). Without it the figure is the one of every other run.
     """
+    if zt is not None:
+        return _xic_figure_zt(
+            d,
+            frags,
+            grid,
+            scheme,
+            zt,
+            hidden=hidden,
+            compact=compact,
+            height=height,
+            key=key,
+            view=view,
+            quant_mode=quant_mode,
+            zt_mode=zt_mode,
+        )
     tall = height if height is not None else (COMPACT_XIC_HEIGHT if compact else None)
     chrom = d.chromatogram
     if chrom is None:
@@ -577,6 +619,586 @@ def xic_figure(
     if shown:
         fig.update_xaxes(range=list(shown))
     return fig
+
+
+class _Series:
+    """An ``rt``/``intensity`` pair for :func:`_peak_height`."""
+
+    __slots__ = ("intensity", "rt")
+
+    def __init__(self, rt: Any, intensity: Any) -> None:
+        self.rt = np.asarray(rt, dtype=np.float64)
+        self.intensity = np.asarray(intensity, dtype=np.float64)
+
+
+def _xic_figure_zt(
+    d: PrecursorDetail,
+    frags: Sequence[Fragment],
+    grid: ScanGrid | None,
+    scheme: str,
+    zt: Any,
+    *,
+    hidden: Collection[int] = (),
+    compact: bool = False,
+    height: int | None = None,
+    key: str | None = None,
+    view: str = "peak",
+    quant_mode: str | None = None,
+    zt_mode: str = "cycles",
+) -> go.Figure:
+    """:func:`xic_figure` of a ZT Scan run: cycle traces, step samples and Q1 classes.
+
+    Every fragment has two traces in its legend group: the cycle trace (``meta.zt =
+    "cycle"``, one value per Q1 cycle, :data:`mumdia_viewer.data.ztscan.CYCLE_LABEL`) and
+    the step samples (``meta.zt = "step"``, the chromatogram's own samples). ``meta.zhide``
+    hides the one the mode does not show; ``layout.meta.yz`` and ``y2z`` hold the
+    intensity ranges of each mode, which ``mvd.zt`` swaps in. The click targets are one
+    bar per cycle, so a click picks the cycle's middle step.
+    """
+    tall = height if height is not None else (COMPACT_XIC_HEIGHT if compact else None)
+    chrom = d.chromatogram
+    if chrom is None:
+        return _empty("No chromatogram rows for this candidate.", scheme, tall)
+    zmode = zt_mode if zt_mode in ZT_MODES else "cycles"
+    if not zt.collapsed:
+        zmode = "steps"
+    # The engine's cycle-level traces: the chromatogram holds the cycles, no step samples.
+    steps_drawn = zt.has_steps or not zt.collapsed
+    if not steps_drawn:
+        zmode = "cycles"
+    show_cycle, show_step, step_op, step_lines = ZT_STYLE[zmode]
+    traces = chrom.fragments()
+    hidden = set(hidden)
+    mode = quant_mode if quant_mode in QF_MODES else quant_mode_default(d, compact)
+    qf = (
+        d.quant_fragments if d.quant_fragments is not None and d.quant_fragments.available else None
+    )
+    used = set(qf.selected_names()) if qf is not None else set()
+    q = d.quant
+    win_lo = q.integration_lo_rt if q is not None else None
+    win_hi = q.integration_hi_rt if q is not None else None
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        row_heights=[0.7, 0.3],
+        vertical_spacing=0.06 if compact else 0.075,
+    )
+    ms1_top = float(fig.layout.yaxis2.domain[1])
+    xr = x_range(d, grid)
+    peak = peak_range(d, xr)
+    views = {"window": xr.get("range"), "peak": peak or xr.get("range")}
+    view = view if peak is not None else "window"
+    shown = views[view]
+    cyc = {t.index: t for t in zt.fragments}
+    sep_model = zt_separable(zt, len(traces))
+    observed = [traces[f.index] for f in frags if f.observed]
+    cycle_series = [
+        _Series(cyc[f.index].rt, cyc[f.index].value)
+        for f in frags
+        if f.observed and f.index in cyc and cyc[f.index].value.size
+    ]
+    step_series = [_Series(t.rt, t.intensity) for t in observed] if steps_drawn else []
+    ms1 = [t for t in chrom.ms1() if t.observed]
+    ms1_cyc = {t.name: t for t in zt.ms1}
+    ms1_cycle_series = [_Series(t.rt, t.value) for t in zt.ms1]
+    ms1_step_series = [_Series(t.rt, t.intensity) for t in ms1] if steps_drawn else []
+    head = 1.2 if compact else 1.16
+
+    def ranges(series: list[_Series], factor: float) -> dict[str, list[float] | None]:
+        top = max((float(np.nanmax(s.intensity)) for s in series if s.intensity.size), default=0.0)
+        return {
+            name: [0.0, _peak_height(series, rng) * factor] if top > 0 else None
+            for name, rng in views.items()
+        }
+
+    yz = {
+        "cycles": ranges(cycle_series, head),
+        "both": ranges(cycle_series + step_series, head),
+        "steps": ranges(step_series, head),
+    }
+    y2z = {
+        "cycles": ranges(ms1_cycle_series, 1.1),
+        "both": ranges(ms1_cycle_series + ms1_step_series, 1.1),
+        "steps": ranges(ms1_step_series, 1.1),
+    }
+    ymax = max(
+        (float(np.nanmax(s.intensity)) for s in cycle_series + step_series if s.intensity.size),
+        default=0.0,
+    )
+    m1max = max(
+        (
+            float(np.nanmax(s.intensity))
+            for s in ms1_cycle_series + ms1_step_series
+            if s.intensity.size
+        ),
+        default=0.0,
+    )
+
+    # Click targets: one invisible bar per Q1 cycle of the grid, at the cycle's mean RT.
+    if grid is not None and grid.size and not compact:
+        cyc_rt, cyc_no = _cycle_bars(zt, grid)
+        if cyc_rt.size:
+            width = float(np.median(np.diff(cyc_rt))) * 0.92 if cyc_rt.size > 1 else 0.9
+            for row, top in ((1, ymax), (2, m1max)):
+                fig.add_trace(
+                    go.Bar(
+                        x=_r(cyc_rt, 4),
+                        y=np.full(cyc_rt.size, top if top > 0 else 1.0, dtype=np.float32),
+                        width=width,
+                        marker=dict(color="rgba(0,0,0,0)", line=dict(width=0)),
+                        customdata=cyc_no,
+                        hovertemplate=(
+                            "Q1 cycle %{customdata}<br>RT %{x:.2f} s<br>"
+                            "<i>click to show the cycle's middle step</i><extra></extra>"
+                        ),
+                        showlegend=False,
+                        name="cycle" if row == 1 else "cycle (MS1 row)",
+                        meta={"kind": "scan"},
+                    ),
+                    row=row,
+                    col=1,
+                )
+
+    for f in frags:
+        t = traces[f.index]
+        ct = cyc.get(f.index)
+        klass = ct.q1_class if ct is not None else None
+        dash, symbol, tag = Q1_CLASS_STYLE.get(klass, ("solid", "circle", ""))
+        word = (
+            f"<br>Q1 class: {Q1_CLASS_WORD[klass]} (q1f_frag_class)"
+            if klass in Q1_CLASS_WORD
+            else ""
+        )
+        role = None if qf is None else ("used" if f.name in used else "other")
+        width, op, qhide = (
+            QF_STYLE[mode][role] if role is not None else (1.6 if compact else 1.8, 1.0, False)
+        )
+        if compact and role is not None:
+            width = 1.6 if mode == "off" else width
+        visible_base = f.index not in hidden and not qhide
+        used_text = "<br><i>used for the quantity</i>" if role == "used" else ""
+        if not f.observed:
+            if compact:
+                continue
+            meta = {"frag": f.index, "op": min(op, 0.5)}
+            if role is not None:
+                meta.update(qf=role, qhide=qhide)
+            fig.add_trace(
+                go.Scatter(
+                    x=[],
+                    y=[],
+                    mode="lines",
+                    name=f"{f.html}{tag} (never observed)",
+                    legendgroup=f"f{f.index}",
+                    line=dict(color=f.colour, width=1.5, dash="dot"),
+                    meta=meta,
+                    opacity=meta["op"],
+                    visible=True if visible_base else "legendonly",
+                    hoverinfo="skip",
+                ),
+                row=1,
+                col=1,
+            )
+            continue
+        # The cycle trace carries the legend entry while it is shown.
+        if ct is not None and ct.value.size:
+            meta = {"frag": f.index, "op": op, "zt": "cycle", "zhide": not show_cycle}
+            if role is not None:
+                meta.update(qf=role, qhide=qhide)
+            n_text = np.asarray(ct.n, dtype=np.int64)
+            fig.add_trace(
+                go.Scatter(
+                    x=_r(ct.rt, 3),
+                    y=_r(ct.value, 1),
+                    customdata=np.stack([ct.cycles, n_text], axis=1),
+                    mode="lines" if compact else "lines+markers",
+                    name=f"{f.html}{tag}",
+                    legendgroup=f"f{f.index}",
+                    showlegend=show_cycle,
+                    line=dict(color=f.colour, width=width, shape="linear", dash=dash),
+                    marker=dict(size=6, color=f.colour, symbol=symbol, line=dict(width=1.2)),
+                    meta=meta,
+                    opacity=op,
+                    visible=True if visible_base and show_cycle else "legendonly",
+                    hovertemplate=(
+                        f"<b>{f.html}</b> · m/z {f.mz:.4f}<br>Q1 cycle %{{customdata[0]}}"
+                        + (" (%{customdata[1]} steps)" if zt.has_steps else "")
+                        + "<br>RT %{x:.2f} s<br>"
+                        f"cycle value %{{y:,.0f}}{word}{used_text}"
+                        + (
+                            "<br><i>viewer-derived: transmission-weighted collapse</i>"
+                            if zt.has_steps
+                            else "<br><i>the engine's cycle-level trace</i>"
+                        )
+                        + "<extra></extra>"
+                    ),
+                ),
+                row=1,
+                col=1,
+            )
+            model = sep_model
+            if model is not None and not compact and f.index < model[2].size:
+                m_rt, m_e, m_amp = model
+                a = float(m_amp[f.index])
+                if math.isfinite(a) and a > 0:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=_r(m_rt, 3),
+                            y=_r(a * m_e, 1),
+                            mode="lines",
+                            name=f"{f.html} (model)",
+                            legendgroup=f"f{f.index}",
+                            showlegend=False,
+                            line=dict(color=f.colour, width=1.2, dash="dot"),
+                            opacity=0.75,
+                            meta={
+                                "frag": f.index,
+                                "op": 0.75,
+                                "zt": "cycle",
+                                "zhide": not show_cycle,
+                                "model": True,
+                            },
+                            visible=True if visible_base and show_cycle else "legendonly",
+                            hovertemplate=(
+                                f"<b>{f.html}</b>: the engine's separable RT x Q1 model, "
+                                "q1s_frag_amp x q1s_elution<br>RT %{x:.2f} s<br>%{y:,.0f}"
+                                "<extra></extra>"
+                            ),
+                        ),
+                        row=1,
+                        col=1,
+                    )
+            if role == "used" and not compact:
+                rt = np.asarray(ct.rt, dtype="float64")
+                keep = np.ones(rt.size, dtype=bool)
+                if win_lo is not None:
+                    keep &= rt >= float(win_lo)
+                if win_hi is not None:
+                    keep &= rt <= float(win_hi)
+                if keep.any():
+                    _, fill_op, fill_hide = QF_STYLE[mode]["fill"]
+                    fig.add_trace(
+                        go.Scatter(
+                            x=_r(rt[keep], 3),
+                            y=_r(ct.value[keep], 1),
+                            mode="none",
+                            fill="tozeroy",
+                            fillcolor=_rgba(f.colour, QF_FILL_ALPHA),
+                            name=f"{f.html} (integrated)",
+                            legendgroup=f"f{f.index}",
+                            showlegend=False,
+                            hoverinfo="skip",
+                            meta={
+                                "frag": f.index,
+                                "op": fill_op,
+                                "qf": "fill",
+                                "qhide": fill_hide,
+                                "zt": "cycle",
+                                "zhide": not show_cycle,
+                            },
+                            visible=(
+                                "legendonly"
+                                if fill_hide or f.index in hidden or not show_cycle
+                                else True
+                            ),
+                        ),
+                        row=1,
+                        col=1,
+                    )
+        if not steps_drawn:
+            continue
+        # Drawn alone (``steps``) the samples take the fragment's opacity, faint otherwise;
+        # ``qop`` keeps the former for mvd.zt.
+        s_op = op if step_lines else step_op
+        meta = {
+            "frag": f.index,
+            "op": s_op,
+            "qop": op,
+            "qw": width,
+            "zt": "step",
+            "zhide": not show_step,
+        }
+        if role is not None:
+            # ``qs``, not ``qf``: mvd.quant styles these through mvd.zt's rules.
+            meta.update(qs=role, qhide=qhide)
+        fig.add_trace(
+            go.Scatter(
+                x=_r(t.rt, 3),
+                y=_r(t.intensity, 1),
+                mode=("lines" if compact else "lines+markers") if step_lines else "markers",
+                name=f"{f.html}{tag}",
+                legendgroup=f"f{f.index}",
+                showlegend=not show_cycle or ct is None or not ct.value.size,
+                line=dict(color=f.colour, width=width if step_lines else 1.0, dash=dash),
+                marker=dict(size=4 if step_lines else 4.5, color=f.colour),
+                meta=meta,
+                opacity=s_op,
+                visible=True if visible_base and show_step else "legendonly",
+                hovertemplate=(
+                    f"<b>{f.html}</b> · m/z {f.mz:.4f}<br>RT %{{x:.3f}} s<br>"
+                    f"step sample %{{y:,.0f}}{word}<br><i>one covering MS2 spectrum (Q1 "
+                    "step) of the chromatogram</i><extra></extra>"
+                ),
+            ),
+            row=1,
+            col=1,
+        )
+        if role == "used" and not compact and t.rt.size:
+            # The integration window over the step samples, shown with them alone.
+            rt = np.asarray(t.rt, dtype="float64")
+            keep = np.ones(rt.size, dtype=bool)
+            if win_lo is not None:
+                keep &= rt >= float(np.float32(win_lo))
+            if win_hi is not None:
+                keep &= rt <= float(np.float32(win_hi))
+            if keep.any():
+                _, fill_op, fill_hide = QF_STYLE[mode]["fill"]
+                step_fill = step_lines and show_step
+                fig.add_trace(
+                    go.Scatter(
+                        x=_r(t.rt[keep], 3),
+                        y=_r(t.intensity[keep], 1),
+                        mode="none",
+                        fill="tozeroy",
+                        fillcolor=_rgba(f.colour, QF_FILL_ALPHA),
+                        name=f"{f.html} (integrated)",
+                        legendgroup=f"f{f.index}",
+                        showlegend=False,
+                        hoverinfo="skip",
+                        meta={
+                            "frag": f.index,
+                            "op": fill_op,
+                            "qf": "fill",
+                            "qhide": fill_hide,
+                            "zt": "stepfill",
+                            "zhide": not step_fill,
+                        },
+                        visible=(
+                            "legendonly"
+                            if fill_hide or f.index in hidden or not step_fill
+                            else True
+                        ),
+                    ),
+                    row=1,
+                    col=1,
+                )
+
+    names = {"ms1_mono": "mono", "ms1_iso1": "+1", "ms1_iso2": "+2"}
+    for i, t in enumerate(ms1):
+        colour = theme.MS1[i % len(theme.MS1)]
+        label = names.get(t.frag_name, t.frag_name)
+        ct = ms1_cyc.get(t.frag_name)
+        if ct is not None and ct.value.size:
+            fig.add_trace(
+                go.Scatter(
+                    x=_r(ct.rt, 3),
+                    y=_r(ct.value, 1),
+                    mode="lines" if compact else "lines+markers",
+                    name=label,
+                    line=dict(color=colour, width=1.6 if compact else 1.8),
+                    marker=dict(size=4.5, color=colour),
+                    legend="legend2",
+                    showlegend=show_cycle,
+                    meta={
+                        "kind": "ms1",
+                        "name": t.frag_name,
+                        "zt": "cycle",
+                        "zhide": not show_cycle,
+                    },
+                    visible=show_cycle,
+                    hovertemplate=(
+                        f"<b>MS1 {label}</b> ({t.frag_name}) · m/z {t.frag_mz:.4f}<br>RT "
+                        "%{x:.2f} s<br>cycle value %{y:,.0f}<br><i>viewer-derived: the mean of "
+                        "the cycle's samples</i><extra></extra>"
+                    ),
+                ),
+                row=2,
+                col=1,
+            )
+        if not steps_drawn:
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=_r(t.rt, 3),
+                y=_r(t.intensity, 1),
+                mode=("lines" if compact else "lines+markers") if step_lines else "markers",
+                name=label,
+                line=dict(color=colour, width=1.8 if step_lines else 1.0),
+                marker=dict(size=3.5, color=colour),
+                legend="legend2",
+                showlegend=not show_cycle or ct is None,
+                opacity=step_op,
+                meta={"kind": "ms1", "name": t.frag_name, "zt": "step", "zhide": not show_step},
+                visible=show_step or ct is None,
+                hovertemplate=(
+                    f"<b>MS1 {label}</b> ({t.frag_name}) · m/z "
+                    f"{t.frag_mz:.4f}<br>RT %{{x:.3f}} s<br>intensity %{{y:,.0f}}<extra></extra>"
+                ),
+            ),
+            row=2,
+            col=1,
+        )
+    if ms1 and m1max <= 0:
+        fig.add_annotation(
+            name="ms1-zero",
+            text="the MS1 isotope traces are 0 in every grid scan",
+            xref="x2 domain",
+            yref="y2 domain",
+            x=0.5,
+            y=0.55,
+            showarrow=False,
+            font=dict(size=11, color=theme.PREDICTION),
+        )
+    if not ms1:
+        fig.add_annotation(
+            name="no-ms1",
+            text="no MS1 isotope rows (sparse mode or no MS1 data)",
+            xref="x2 domain",
+            yref="y2 domain",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=11),
+        )
+
+    shapes, notes, edges = _xic_markers(d, xr, shown, compact=compact)
+    step = xr.get("step") or (grid.spacing() if grid is not None else 1.0)
+    annotations = _peak_annotations(d, compact=compact) + notes
+    if not observed:
+        annotations.append(
+            dict(
+                name="no-fragments",
+                text="no fragment of this candidate was observed in its RT window",
+                xref="x domain",
+                yref="y domain",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+                font=dict(size=11 if compact else 12),
+            )
+        )
+    for a in annotations:
+        fig.add_annotation(**a)
+    for s_ in shapes:
+        fig.add_shape(**s_)
+    legends: dict[str, Any] = {
+        "legend": dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.01,
+            xanchor="left",
+            x=0,
+            font=dict(size=11),
+            itemclick="toggle",
+            itemdoubleclick="toggleothers",
+            groupclick="toggleitem",
+            itemwidth=30,
+            tracegroupgap=0,
+        ),
+        "legend2": dict(
+            orientation="h",
+            yanchor="bottom",
+            y=ms1_top + 0.004,
+            xanchor="right",
+            x=1,
+            font=dict(size=10),
+            itemwidth=30,
+            bgcolor="rgba(0,0,0,0)",
+        ),
+    }
+    y_views = yz[zmode]
+    y2_views = y2z[zmode]
+    figures.themed(
+        fig,
+        scheme,
+        height=tall,
+        hovermode="closest",
+        hoverdistance=12,
+        uirevision="pv-xic" if compact else "pd-xic",
+        bargap=0,
+        margin=dict(l=46, r=8, t=8, b=30) if compact else dict(XIC_MARGIN),
+        showlegend=not compact,
+        modebar=MODEBAR,
+        meta={
+            "xr": xr.get("range"),
+            "views": views,
+            "view": view,
+            "y": y_views,
+            "y2": y2_views,
+            "yz": yz,
+            "y2z": y2z,
+            "zt": zmode,
+            "edges": edges,
+            "step": step,
+            "key": key,
+            "qf": mode if qf is not None else None,
+        },
+        **({} if compact else legends),
+    )
+    yr = y_views[view]
+    small = dict(tickfont=dict(size=10), title_font=dict(size=10)) if compact else {}
+    fig.update_yaxes(
+        title_text=(
+            "fragments"
+            if compact
+            else ("intensity per Q1 cycle" if zmode != "steps" else "fragment intensity")
+        ),
+        tickformat="~s",
+        rangemode="tozero",
+        row=1,
+        col=1,
+        nticks=4 if compact else None,
+        **small,
+        **({"range": yr} if yr else {}),
+    )
+    fig.update_yaxes(
+        title_text="MS1" if compact else "MS1 isotopes",
+        tickformat="~s",
+        rangemode="tozero",
+        row=2,
+        col=1,
+        nticks=3 if compact else None,
+        **small,
+        **(
+            {"range": [0, 1], "showticklabels": False}
+            if m1max <= 0
+            else {"range": y2_views[view]}
+            if y2_views[view]
+            else {}
+        ),
+    )
+    fig.update_xaxes(showspikes=False)
+    fig.update_xaxes(
+        title_text="RT (s)" if compact else "retention time (s)",
+        row=2,
+        col=1,
+        **(dict(title_standoff=2, **small) if compact else {}),
+    )
+    if compact:
+        fig.update_xaxes(tickfont=dict(size=10), row=1, col=1)
+    if shown:
+        fig.update_xaxes(range=list(shown))
+    return fig
+
+
+def zt_separable(zt: Any, n: int) -> Any:
+    """The engine's separable model of the row of ``zt`` (psms_extracted v9), or None."""
+    from mumdia_viewer.data.ztscan import separable_model
+
+    return separable_model(getattr(zt, "row", None), n)
+
+
+def _cycle_bars(zt: Any, grid: ScanGrid) -> tuple[np.ndarray, np.ndarray]:
+    """The mean RT and the number of each Q1 cycle of the XIC grid (the cycles of the
+    collapsed traces), for the click targets."""
+    best = None
+    for t in zt.fragments:
+        if t.cycles.size and (best is None or t.cycles.size > best.cycles.size):
+            best = t
+    if best is None:
+        return np.zeros(0), np.zeros(0, dtype=np.int64)
+    return np.asarray(best.rt, dtype=np.float64), np.asarray(best.cycles, dtype=np.int64)
 
 
 def im_trace_figure(
