@@ -30,6 +30,13 @@
     off: { used: [1.8, 1.0, false], other: [1.8, 1.0, false], fill: [0, 1.0, true] },
   };
   const PENDING_MAX = 6000;
+  // ZT Scan runs (detail_figures.ZT_STYLE): per mode, [cycle traces shown, step samples
+  // shown, step opacity, step samples drawn with lines].
+  const ZT_STYLE = {
+    cycles: [true, false, 0.45, false],
+    both: [true, true, 0.45, false],
+    steps: [false, true, 1.0, true],
+  };
 
   // The page state the clientside callbacks share (reset by `init` on every page).
   const cur = {
@@ -139,7 +146,7 @@
       if (k === null) {
         return t;
       }
-      const qhide = !!(t.meta && t.meta.qhide);
+      const qhide = !!(t.meta && (t.meta.qhide || t.meta.zhide));
       const want = off.has(k) || qhide ? (legendonly ? "legendonly" : false) : true;
       const now = t.visible === undefined ? true : t.visible;
       if (now === want) {
@@ -867,6 +874,23 @@
         const off = new Set(hidden || []);
         let changed = false;
         const data = fig.data.map(function (t) {
+          const steps = t.meta && t.meta.qs;
+          if (steps && style[steps]) {
+            changed = true;
+            const st = style[steps];
+            const k = fragOf(t);
+            const meta = Object.assign({}, t.meta, { qhide: st[2], qop: st[1], qw: st[0] });
+            const out = Object.assign({}, t, {
+              meta: meta,
+              visible: st[2] || meta.zhide || (k !== null && off.has(k)) ? "legendonly" : true,
+            });
+            if (String(t.mode || "").indexOf("lines") >= 0) {
+              meta.op = st[1];
+              out.opacity = st[1];
+              out.line = Object.assign({}, t.line || {}, { width: st[0] });
+            }
+            return out;
+          }
           const role = t.meta && t.meta.qf;
           const s = role ? style[role] : null;
           if (!s) {
@@ -875,9 +899,10 @@
           changed = true;
           const k = fragOf(t);
           const meta = Object.assign({}, t.meta, { qhide: s[2] });
+          const zhide = !!(t.meta && t.meta.zhide);
           const out = Object.assign({}, t, {
             meta: meta,
-            visible: s[2] || (k !== null && off.has(k)) ? "legendonly" : true,
+            visible: s[2] || zhide || (k !== null && off.has(k)) ? "legendonly" : true,
           });
           if (role !== "fill") {
             // A fragment never observed has no points: it keeps its dotted line at half
@@ -898,6 +923,73 @@
           meta: Object.assign({}, (fig.layout && fig.layout.meta) || {}, { qf: mode }),
         });
         return Object.assign({}, fig, { data: data, layout: layout });
+      },
+
+      // ZT Scan runs: one value per Q1 cycle, with the per-step samples faint behind it,
+      // or the samples alone (ZT_STYLE). A hidden fragment stays hidden; the intensity
+      // axes take the mode's ranges (layout.meta.yz, y2z).
+      zt: function (mode, fig, hidden) {
+        const style = ZT_STYLE[mode];
+        if (!fig || !fig.data || !style) {
+          return NO();
+        }
+        const off = new Set(hidden || []);
+        let changed = false;
+        const data = fig.data.map(function (t) {
+          const m = t.meta;
+          if (!m || typeof m !== "object" || !m.zt) {
+            return t;
+          }
+          changed = true;
+          const cycle = m.zt === "cycle";
+          // The integration fill of the step samples shows with the samples drawn alone.
+          const show =
+            m.zt === "stepfill" ? style[1] && style[3] : cycle ? style[0] : style[1];
+          const meta = Object.assign({}, m, { zhide: !show });
+          const out = Object.assign({}, t, { meta: meta });
+          const k = fragOf(t);
+          if (k === null) {
+            out.visible = show;
+          } else {
+            out.visible = show && !off.has(k) && !meta.qhide ? true : "legendonly";
+          }
+          if (cycle || m.zt === "stepfill") {
+            if (m.qf !== "fill") {
+              out.showlegend = style[0];
+            }
+            return out;
+          }
+          const lines = style[3];
+          const op = lines ? (typeof m.qop === "number" ? m.qop : 1) : style[2];
+          meta.op = op;
+          out.opacity = op;
+          out.mode = lines ? "lines+markers" : "markers";
+          out.showlegend = !style[0];
+          out.line = Object.assign({}, t.line || {}, {
+            width: lines ? (typeof m.qw === "number" ? m.qw : 1.8) : 1.0,
+          });
+          out.marker = Object.assign({}, t.marker || {}, { size: lines ? 4 : 4.5 });
+          return out;
+        });
+        if (!changed) {
+          return NO();
+        }
+        const layout = Object.assign({}, fig.layout);
+        const lmeta = Object.assign({}, layout.meta || {});
+        if (lmeta.yz && lmeta.yz[mode]) {
+          lmeta.y = lmeta.yz[mode];
+        }
+        if (lmeta.y2z && lmeta.y2z[mode]) {
+          lmeta.y2 = lmeta.y2z[mode];
+        }
+        lmeta.zt = mode;
+        layout.meta = lmeta;
+        const ya = Object.assign({}, layout.yaxis || {});
+        ya.title = Object.assign({}, ya.title || {}, {
+          text: mode === "steps" ? "fragment intensity" : "intensity per Q1 cycle",
+        });
+        layout.yaxis = ya;
+        return Object.assign({}, fig, { data: data, layout: yAxes(layout, lmeta.view || "window") });
       },
 
       // Linear or log intensity axes of the XIC (both rows); a linear axis takes the

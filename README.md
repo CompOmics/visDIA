@@ -52,6 +52,12 @@ token in the address keeps other users of a shared machine out.
 - **Memory:** the viewer's DuckDB databases may use a quarter of the physical memory (at
   least 1 GiB, at most 16 GiB). `--memory-limit 8GB` (or `50%`), or the
   `MUMDIA_VIEWER_MEMORY_LIMIT` environment variable, sets another limit.
+- **SCIEX ZT Scan DIA runs** (MuMDIA 0.12 and later) are recognised from their spectra,
+  which record the Q1 sweep. The precursor page then draws each XIC as one value per Q1
+  cycle instead of the per-step sawtooth, marks each fragment with the engine's Q1
+  decision, and adds a Q1 sweep card: each fragment's RT x Q1-step patch around the apex
+  and its Q1 profile against the calibrated transmission. See
+  [ZT Scan DIA runs](docs/user-guide.md#zt-scan-dia-runs).
 
 The [user guide](docs/user-guide.md) describes every page, the options, where the viewer
 keeps its files, and how to solve common problems.
@@ -60,6 +66,7 @@ keeps its files, and how to solve common problems.
 |---|---|
 | ![Protein page](docs/screenshots/views/protein.png) | ![Calibration](docs/screenshots/views/calibration.png) |
 | ![Run QC](docs/screenshots/views/run_qc.png) | ![Compare](docs/screenshots/views/compare.png) |
+| ![ZT Scan XIC, one value per Q1 cycle](docs/screenshots/views/ztscan_xic.png) | ![ZT Scan Q1 sweep card](docs/screenshots/views/ztscan_q1.png) |
 
 Every number is MuMDIA's own column. A number the viewer derives (a percentile, a
 coverage, a CV, a viewer-side spectrum match) says so where it is shown.

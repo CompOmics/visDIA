@@ -8,7 +8,8 @@ the scan buttons and the arrow keys choose the scan; hovering a fragment highlig
 every panel and a legend click hides it in both plots (``assets/detail.js``). The verdict
 strip, the q table, the competition and the partner carry validation marks at the
 header's threshold. Every number comes from the data layer; values the viewer derives
-say so. The cards are built in :mod:`.detail_cards`.
+say so. The cards are built in :mod:`.detail_cards`. On a SCIEX ZT Scan DIA run the XIC
+draws one value per Q1 cycle and the Q1 sweep card is added (:mod:`.detail_ztscan`).
 
 :func:`preview` is the compact, static version of the page for the identification page.
 """
@@ -51,6 +52,7 @@ from . import detail_ions as ions
 from . import detail_mobilogram as mobc
 from . import detail_preview as pv
 from . import detail_view as view
+from . import detail_ztscan as ztc
 from .icons import icon
 from .notes import note_card
 from .state import PageContext, href, parse_threshold
@@ -414,6 +416,7 @@ def layout(ctx: PageContext) -> Any:
     scan_rt = float(np.float32(m.pick.rt)) if m is not None else None
     xr = dfig.x_range(d, grid)
     views = cards.xic_views(d, grid)
+    zt_traces, zt_why = ztc.zt_traces(rs, d)
     mz = view.mz_range(m)
     linked = html.Div(
         [
@@ -421,7 +424,17 @@ def layout(ctx: PageContext) -> Any:
                 [
                     c
                     for c in (
-                        cards.xic_card(ctx, d, frags, grid, key=f"{run}|{int(cid)}", views=views),
+                        cards.xic_card(
+                            ctx,
+                            d,
+                            frags,
+                            grid,
+                            key=f"{run}|{int(cid)}",
+                            views=views,
+                            zt=zt_traces,
+                            zt_why=zt_why,
+                        ),
+                        ztc.zt_card(ctx, d, frags),
                         cards.rt_card(d, xr, pct_map),
                         cards.im_trace_card(ctx, d, frags),
                         mobc.mobilogram_card(ctx, d, frags, centre_rt=scan_rt),
@@ -637,6 +650,14 @@ def register(app, get_rs, base: str) -> None:
         prevent_initial_call=True,
     )
     app.clientside_callback(
+        ClientsideFunction("mvd", "zt"),
+        Output(XIC, "figure", allow_duplicate=True),
+        Input("pd-xic-zt", "value"),
+        State(XIC, "figure"),
+        State("pd-hidden", "data"),
+        prevent_initial_call=True,
+    )
+    app.clientside_callback(
         ClientsideFunction("mvd", "axis"),
         Output(XIC, "figure", allow_duplicate=True),
         Input("pd-xic-axis", "value"),
@@ -744,6 +765,7 @@ def register(app, get_rs, base: str) -> None:
             return no_update, [dmc.Text(str(exc), size="xs", c="red")], no_update
 
     mobc.register(app, get_rs, get_detail)
+    ztc.register(app, get_rs, get_detail)
 
 
 __all__ = [

@@ -13,6 +13,7 @@ the artifact, the version found and the versions supported. It does not guess.
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Literal
 
@@ -54,6 +55,11 @@ RELEASED: dict[str, frozenset[int]] = {
 LATER: dict[str, frozenset[int]] = {
     "fragment_quant": frozenset({6}),
     "quant_fragments": frozenset({1}),
+    # The MS1 isotope-envelope columns ``ms1e_*`` (``features.ms1_envelope``, any input
+    # without 1/K0) and the quant flags ``first_pass_id`` (v3, ``mbr.first_pass_flag``) and
+    # ``q1_quant`` (v4, ``quant.q1_fragments``). The viewer reads columns by name.
+    "psms_extracted": frozenset({7}),
+    "peptide_quant": frozenset({3, 4}),
 }
 
 # Versions written only by pre-release development builds that report version 0.1.0.
@@ -83,6 +89,24 @@ UNRELEASED_IM: dict[str, frozenset[int]] = {
     "psms_extracted": frozenset({3, 5}),
 }
 
+# Versions written on SCIEX ZT Scan DIA input (a scanning quadrupole) by MuMDIA 0.12.0 and
+# later (docs/37_ztscan.md of the engine): ``spectra_ms2`` v3 records the Q1 sweep
+# (``q1_cycle``, ``q1_step``); ``psms_extracted`` v5 the Q1-profile evidence
+# (``extract.q1_profile``), v6 the per-fragment Q1 decisions (``q1f_*``) and v8 the
+# unfragmented-precursor and multi-scale Q1 scores. ``spectra_ms2`` v3 and ``psms_extracted``
+# v5 reuse numbers of the unreleased ion-mobility branch, so those two are read as ZT Scan
+# versions only when the file holds the ZT Scan columns (:data:`ZTSCAN_MARKERS`).
+ZTSCAN: dict[str, frozenset[int]] = {
+    "spectra_ms2": frozenset({3}),
+    "psms_extracted": frozenset({5, 6, 8, 9}),
+    # Cycle-level traces (``extract.q1_traces``): layout 1 or 2 plus ``q1_class``.
+    "chromatograms": frozenset({5, 6}),
+}
+ZTSCAN_MARKERS: dict[tuple[str, int], tuple[str, ...]] = {
+    ("spectra_ms2", 3): ("q1_cycle", "q1_step"),
+    ("psms_extracted", 5): ("q1_corr",),
+}
+
 VersionSource = Literal["manifest", "report", "inferred", "unrecorded"]
 
 
@@ -104,29 +128,60 @@ class VersionInfo:
         return f"{self.schema_name} v{self.version}{suffix}"
 
 
-def supported_versions(schema_name: str, *, allow_unreleased: bool = False) -> frozenset[int]:
-    """Versions of ``schema_name`` this viewer reads."""
+def is_ztscan_version(
+    schema_name: str, version: int | None, columns: Collection[str] | None
+) -> bool:
+    """True when ``version`` of ``schema_name`` is a ZT Scan version (:data:`ZTSCAN`) and,
+    where the number is shared with the unreleased ion-mobility branch, ``columns`` hold
+    the ZT Scan columns (unknown columns: not a ZT Scan version)."""
+    if version is None or version not in ZTSCAN.get(schema_name, frozenset()):
+        return False
+    markers = ZTSCAN_MARKERS.get((schema_name, version))
+    if markers is None:
+        return True
+    return columns is not None and all(c in set(columns) for c in markers)
+
+
+def supported_versions(
+    schema_name: str,
+    *,
+    allow_unreleased: bool = False,
+    columns: Collection[str] | None = None,
+) -> frozenset[int]:
+    """Versions of ``schema_name`` this viewer reads. ``columns`` (the file's columns, when
+    known) admit the ZT Scan versions that share a number with the ion-mobility branch."""
     versions = set(RELEASED.get(schema_name, frozenset()))
     versions |= LATER.get(schema_name, frozenset())
     versions |= DEV_BUILD.get(schema_name, frozenset())
     versions |= DIAPASEF.get(schema_name, frozenset())
+    versions |= {
+        v
+        for v in ZTSCAN.get(schema_name, frozenset())
+        if is_ztscan_version(schema_name, v, columns)
+    }
     if allow_unreleased:
         versions |= UNRELEASED_IM.get(schema_name, frozenset())
     return frozenset(versions)
 
 
 def check_version(
-    schema_name: str, version: int | None, *, where: str, allow_unreleased: bool = False
+    schema_name: str,
+    version: int | None,
+    *,
+    where: str,
+    allow_unreleased: bool = False,
+    columns: Collection[str] | None = None,
 ) -> None:
     """Raise :class:`SchemaVersionError` when ``version`` is not readable.
 
     ``version=None`` (nothing recorded) is accepted here; callers label such files.
     Schema names outside the registry are not checked, because the viewer does not
-    read them.
+    read them. ``columns`` are the file's columns when known: a ZT Scan version whose
+    number the ion-mobility branch also wrote is read only with its ZT Scan columns.
     """
     if version is None or (schema_name not in RELEASED and schema_name not in LATER):
         return
-    supported = supported_versions(schema_name, allow_unreleased=allow_unreleased)
+    supported = supported_versions(schema_name, allow_unreleased=allow_unreleased, columns=columns)
     if version in supported:
         return
     listed = ", ".join(str(v) for v in sorted(supported))
@@ -336,9 +391,14 @@ class ChromatogramLayout:
 
     family: int
     has_im: bool
+    # ZT Scan cycle-level traces (``extract.q1_traces``, versions 5 and 6): one point per
+    # Q1 cycle and a per-row ``q1_class``.
+    q1_traces: bool = False
 
     @property
     def schema_version(self) -> int:
+        if self.q1_traces:
+            return 5 if self.family == 1 else 6
         return {(1, False): 1, (2, False): 2, (1, True): 3, (2, True): 4}[
             (self.family, self.has_im)
         ]
@@ -356,13 +416,15 @@ def chromatogram_layout(schema: pa.Schema, *, where: str = "chromatograms") -> C
     if v2 == _CHROM_V2 and not v1:
         if "im" in names:
             raise LayoutError(f"{where}: an `im` column beside the version-2 layout is not valid.")
-        return ChromatogramLayout(family=2, has_im="im_trimmed" in names)
+        return ChromatogramLayout(
+            family=2, has_im="im_trimmed" in names, q1_traces="q1_class" in names
+        )
     if v1 == _CHROM_V1 and not v2:
         if "im_trimmed" in names:
             raise LayoutError(
                 f"{where}: an `im_trimmed` column beside the version-1 layout is not valid."
             )
-        return ChromatogramLayout(family=1, has_im="im" in names)
+        return ChromatogramLayout(family=1, has_im="im" in names, q1_traces="q1_class" in names)
     raise LayoutError(
         f"{where}: the columns are neither chromatogram layout (found "
         f"{sorted(v1 | v2) or 'none'} of rt, intensity, rt_axis, intensity_trimmed, "
