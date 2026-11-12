@@ -768,9 +768,16 @@ def _key(label: str, value: str, text: str, kind: str, colour: str) -> Any:
 # ZT Scan runs: what the XIC's apex and bounds are, and the Q1 classes (detail_figures).
 ZT_APEX_TEXT = (
     "apex_rt of the scored row, the engine's column: the RT of one MS2 spectrum, the apex "
-    "step of the apex Q1 cycle. The cycle trace's points sit at the mean RT of their cycle's "
-    "steps, so the apex line can sit a few ms off the cycle's point."
+    "step of the apex Q1 cycle. "
 )
+ZT_POINT_TEXT = {
+    True: (
+        "The cycle trace's points sit at the mean RT of their cycle's steps, so the apex line "
+        "can sit a few ms off the cycle's point."
+    ),
+    False: "The engine's cycle trace puts each cycle at the RT of its step nearest the "
+    "expected Q1 centre.",
+}
 ZT_ELUTION_TEXT = (
     "elution_lo and elution_hi of the scored row, the engine's columns: the identification's "
     "bounds, at the RTs of single spectra (Q1 steps)"
@@ -804,7 +811,9 @@ def marker_key(d: PrecursorDetail, xr: dict[str, Any], zt: Any = None) -> Any:
             _key(
                 "apex",
                 rt_text(m.get("apex_rt")),
-                ZT_APEX_TEXT if zt is not None else "apex_rt of the scored row",
+                ZT_APEX_TEXT + ZT_POINT_TEXT[zt.has_steps]
+                if zt is not None
+                else "apex_rt of the scored row",
                 "solid",
                 "#2f9e44",
             )
@@ -816,7 +825,7 @@ def marker_key(d: PrecursorDetail, xr: dict[str, Any], zt: Any = None) -> Any:
                 interval(m.get("integration_lo_rt"), m.get("integration_hi_rt"), digits=1),
                 "integration_lo_rt and integration_hi_rt of peptide_quant: what quant "
                 f"integrated (integration apex {rt_text(m.get('integration_apex_rt'))})"
-                + (zt_quant_text(d) if zt is not None else ""),
+                + (zt_quant_text(d, zt) if zt is not None else ""),
                 "box",
                 "#7048e8",
             )
@@ -912,22 +921,21 @@ ZT_CYCLE_KEY = (
 )
 
 
-def zt_quant_text(d: PrecursorDetail) -> str:
-    """How quant chose its window on a ZT Scan run (``params.q1_cycle_window`` of the
+def zt_quant_text(d: PrecursorDetail, zt: Any) -> str:
+    """What quant integrated on a ZT Scan run: the chromatogram's samples (per step, or the
+    engine's cycle traces) and its window in Q1 cycles (``params.q1_cycle_window`` of the
     peptide_quant report), when recorded."""
+    what = "the per-step samples" if zt.has_steps else "the engine's cycle traces"
     art = d.run.artifact("peptide_quant")
     params = art.report.params if art is not None and art.report is not None else {}
     w = params.get("q1_cycle_window")
-    if not isinstance(w, dict):
-        return ". On this ZT Scan run quant integrated the per-step samples."
-    cycles = w.get("cycles", w.get("q1_cycle_halfwidth"))
-    applied = w.get("applied")
-    if cycles and applied is not False:
+    cycles = w.get("cycles", w.get("q1_cycle_halfwidth")) if isinstance(w, dict) else None
+    if cycles and w.get("applied") is not False:
         return (
-            f". On this ZT Scan run quant integrated the per-step samples over {cycles} Q1 "
-            "cycles either side (quant.q1_cycle_halfwidth, the engine's window)."
+            f". On this ZT Scan run quant integrated {what} over {cycles} Q1 cycles either "
+            "side (quant.q1_cycle_halfwidth, the engine's window)."
         )
-    return ". On this ZT Scan run quant integrated the per-step samples."
+    return f". On this ZT Scan run quant integrated {what}."
 
 
 def scrub_params(grid: view.ScanGrid | None, rng: Any) -> dict[str, Any] | None:
