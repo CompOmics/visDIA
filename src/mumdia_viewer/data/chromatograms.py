@@ -1009,3 +1009,48 @@ class ChromatogramSource:
             ],
             "notice": self.notice,
         }
+
+
+_Q1_MEMO_KEY = "mumdia_viewer.data.chromatograms.Q1TraceSource"
+
+
+class Q1TraceSource(ChromatogramSource):
+    """The cycle-trace table of a SCIEX ZT Scan DIA run (``chromatograms_q1.parquet``).
+
+    Under ``extract.q1_traces`` the engine writes every accepted candidate's traces once more,
+    one point per Q1 cycle, beside ``chromatograms.parquet`` (``second_pass/<run>/`` for a
+    second pass): chromatograms schema 5 (layout 1) or 6 (layout 2) plus ``q1_class``. The
+    run's ``chromatograms.parquet`` keeps the per-step (interleaved) traces. One table per
+    run, read like an ungrouped run's chromatograms.
+
+    Build it with :meth:`for_run`, which returns None for a run without the table.
+    """
+
+    @classmethod
+    def for_run(cls, rs: ResultSet, run: Run) -> Q1TraceSource | None:  # type: ignore[override]
+        """The cycle-trace source of ``run``, built once per result set; None when the run
+        has no readable ``chromatograms_q1`` table."""
+        artifact = run.artifacts.get("chromatograms_q1")
+        if artifact is None or not artifact.usable:
+            return None
+        key = (_Q1_MEMO_KEY, run.index, str(run.root))
+        source = rs._memo.get(key)
+        if source is None:
+            source = cls(rs, run)
+            rs._memo[key] = source
+        return source
+
+    def __repr__(self) -> str:
+        return f"Q1TraceSource({self.run.label})"
+
+    def _resolve(self) -> list[ChromatogramTable]:
+        artifact = self.run.artifacts.get("chromatograms_q1")
+        if artifact is None:
+            raise ArtifactNotFound(f"{self.run.root}: the run has no chromatograms_q1 table.")
+        table = _table_for(artifact, None, None, frozenset())
+        if not table.layout.q1_traces:
+            raise LayoutError(
+                f"{table.path}: a cycle-trace table must have the q1_class column of "
+                "chromatograms schema 5 or 6."
+            )
+        return [table]

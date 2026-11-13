@@ -59,6 +59,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from .chromatograms import CandidateChromatogram, Q1TraceSource
 from .duck import sql_ident, sql_path
 from .errors import ViewerError
 from .pqio import list_values
@@ -143,7 +144,8 @@ STEP_LABEL = (
     "the engine's trace: one sample per covering MS2 spectrum (step) of the chromatogram table"
 )
 ENGINE_CYCLE_LABEL = (
-    "the engine's cycle-level trace (extract.q1_traces, chromatograms v5/v6): one point per Q1 "
+    "the engine's cycle-level trace (extract.q1_traces, chromatograms_q1.parquet, schema 5/6): "
+    "one point per Q1 "
     "cycle, the least-squares amplitude sum(w x)/sum(w^2) of the cycle's covering steps under "
     "the calibrated Q1 transmission, at the RT of the cycle's step nearest the expected Q1 "
     "centre"
@@ -772,13 +774,23 @@ class CycleTraces:
     row: dict[str, Any] | None
     notes: tuple[str, ...] = ()
     cycle_s: float = float("nan")
+    #: The engine's cycle traces came from ``chromatograms_q1.parquet``, so the candidate's
+    #: ``chromatograms.parquet`` rows still hold the per-step samples.
+    steps_in_chromatogram: bool = False
+
+    @property
+    def derived(self) -> bool:
+        """True when the viewer collapsed the steps to cycles; False for the engine's own
+        cycle traces."""
+        return self.source == "viewer"
 
     @property
     def has_steps(self) -> bool:
-        """True when the chromatogram's own samples are per Q1 step (the viewer collapsed
-        them); False when the engine wrote cycle-level traces, whose steps are in the
-        spectra only."""
-        return self.source == "viewer"
+        """True when the candidate's chromatogram (``chromatograms.parquet``) holds one
+        sample per Q1 step, which is what quant integrates and what the XIC can show behind
+        the cycles; False only for a development build of the engine that wrote the cycle
+        traces into ``chromatograms.parquet`` itself, whose steps are in the spectra only."""
+        return self.source == "viewer" or self.steps_in_chromatogram
 
     def fragment(self, index: int) -> CycleTrace | None:
         return next((t for t in self.fragments if t.index == index), None)
@@ -867,9 +879,15 @@ def cycle_traces(rs: ResultSet, d: PrecursorDetail) -> CycleTraces:
         raise ViewerError("no chromatogram rows for this candidate")
     row = q1f_row(rs, d)
     if chrom.layout.q1_traces:
-        return _engine_cycle_traces(zr, d, row)
+        # A development build of the engine wrote the cycle traces into chromatograms.parquet.
+        return _engine_cycle_traces(zr, d, row, chrom, steps_in_chromatogram=False)
+    q1t, why = engine_cycle_chromatogram(rs, d)
+    if q1t is not None:
+        return _engine_cycle_traces(zr, d, row, q1t, steps_in_chromatogram=True)
     pm, _, _ = _row_values(d, row)
     notes: list[str] = list(zr.sweep.notes)
+    if why:
+        notes.append(why)
     cand: CandQ1 | None = None
     if zr.model is not None:
         cand = candidate_model(zr, d, row)
@@ -985,11 +1003,57 @@ def cycle_traces(rs: ResultSet, d: PrecursorDetail) -> CycleTraces:
     )
 
 
-def _engine_cycle_traces(zr: ZtRun, d: PrecursorDetail, row: dict[str, Any] | None) -> CycleTraces:
-    """The engine's cycle-level traces (chromatograms v5/v6) as :class:`CycleTraces`: each
-    point is already one Q1 cycle; its cycle is the cycle of the spectrum at its RT."""
+def engine_cycle_chromatogram(
+    rs: ResultSet, d: PrecursorDetail
+) -> tuple[CandidateChromatogram | None, str | None]:
+    """The candidate's rows of the run's cycle-trace table (``chromatograms_q1.parquet``,
+    :class:`~mumdia_viewer.data.chromatograms.Q1TraceSource`) and, when they cannot be used,
+    why (None when the run has no such table, which is the usual case).
+
+    The rows are used only when their fragment rows are those of the candidate's
+    ``chromatograms.parquet`` rows, in the same order (the engine writes both from the same
+    library rows); otherwise the viewer derives the cycle traces from the per-step rows.
+    """
+    try:
+        source = Q1TraceSource.for_run(rs, d.run)
+    except ViewerError as exc:
+        return None, f"the cycle-trace table is not used: {exc}"
+    art = d.run.artifacts.get("chromatograms_q1")
+    if source is None:
+        if art is not None and art.error:
+            return None, f"the cycle-trace table is not used: {art.error}"
+        return None, None
+    try:
+        q1t = source.read(d.candidate_id)
+    except ViewerError as exc:
+        return None, f"the cycle-trace table is not used: {exc}"
+    if q1t is None:
+        return None, (
+            "chromatograms_q1.parquet has no rows for this candidate (the engine found no Q1 "
+            "cycles for it); the cycle traces are derived from the per-step traces"
+        )
     chrom = d.chromatogram
-    assert chrom is not None
+    if chrom is not None:
+        names = [t.frag_name for t in chrom.traces]
+        if [t.frag_name for t in q1t.traces] != names:
+            return None, (
+                "the rows of chromatograms_q1.parquet are not the candidate's chromatogram rows; "
+                "the cycle traces are derived from the per-step traces"
+            )
+    return q1t, None
+
+
+def _engine_cycle_traces(
+    zr: ZtRun,
+    d: PrecursorDetail,
+    row: dict[str, Any] | None,
+    chrom: CandidateChromatogram,
+    *,
+    steps_in_chromatogram: bool,
+) -> CycleTraces:
+    """The engine's cycle-level traces (``chromatograms_q1.parquet``, schema 5/6) as
+    :class:`CycleTraces`: each point is already one Q1 cycle; its cycle is the cycle of the
+    spectrum at its RT."""
     frags = chrom.fragments()
     classes = _classes(row, len(frags))
     order = np.argsort(zr.scans.rt, kind="stable")
@@ -1043,6 +1107,7 @@ def _engine_cycle_traces(zr: ZtRun, d: PrecursorDetail, row: dict[str, Any] | No
         row=row,
         notes=tuple(zr.sweep.notes),
         cycle_s=zr.sweep.cycle_s,
+        steps_in_chromatogram=steps_in_chromatogram,
     )
 
 

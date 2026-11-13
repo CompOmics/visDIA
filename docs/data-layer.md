@@ -92,7 +92,7 @@ schema whose 3D versions have none infers the diaPASEF version.
 | `psms_competed` | 3, 4; 2 (pre-release) | |
 | `features` | 1 (float64), 2 (float32) | |
 | `psms_extracted` | 2; 1 (pre-release); 4 (diaPASEF); 5, 6, 8, 9 (ZT Scan); 7 | 5: Q1 profile, 6: per-fragment Q1 decisions, 8: precursor and multi-scale Q1 scores, 9: separable RT x Q1 model; 7: MS1 isotope envelope |
-| `chromatograms` | 1, 2; 3, 4 (diaPASEF: per-point 1/K0); 5, 6 (ZT Scan: one point per Q1 cycle and `q1_class`) | 3/4 only when `features.im_features` or retrace is on; 5/6 under `extract.q1_traces` |
+| `chromatograms` | 1, 2; 3, 4 (diaPASEF: per-point 1/K0); 5, 6 (ZT Scan: one point per Q1 cycle and `q1_class`) | 3/4 only when `features.im_features` or retrace is on; 5/6 is `chromatograms_q1.parquet` (run key `chromatograms_q1`), written beside `chromatograms.parquet` under `extract.q1_traces` |
 | `spectra_ms1`, `spectra_ms2`, `isolation_windows`, `fragment_library_precursors`, `seed_psms` | 1; 2 (diaPASEF); `spectra_ms2` 3 (ZT Scan: `q1_cycle`, `q1_step`) | |
 | `peptide_quant` | 2; 3 (`first_pass_id`), 4 (`q1_quant`) | |
 | `protein_group_quant` | 2 | |
@@ -261,8 +261,15 @@ precursor's isotopes.
 - `ztscan.cycle_traces(rs, detail)` collapses the candidate's chromatogram to one value per
   Q1 cycle: each sample is located in the sweep (the nearest covering spectrum within 0.45
   of the median scan spacing) and the samples of a cycle become `sum(w x) / sum(w^2)` at
-  their mean RT (`q1quant::collapse_trace`). On a chromatogram the engine already wrote per
-  cycle (versions 5 and 6) it returns those traces, `source = "engine"`.
+  their mean RT (`q1quant::collapse_trace`). When the run has the engine's cycle-trace
+  table (`extract.q1_traces`: `chromatograms_q1.parquet` beside `chromatograms.parquet`, or
+  under `second_pass/<run>/` for a second pass; versions 5 and 6, read by
+  `chromatograms.Q1TraceSource`) it returns the candidate's rows of that table,
+  `source = "engine"`, and `has_steps` stays true because `chromatograms.parquet` keeps the
+  per-step traces. A candidate the table does not hold, or whose fragment rows differ from
+  its chromatogram rows, falls back to the viewer's collapse with a note
+  (`ztscan.engine_cycle_chromatogram`). Cycle traces inside `chromatograms.parquet` itself
+  (development builds of the engine) are read the same way, with `has_steps` false.
 - `ztscan.q1_patch(rs, detail, half_cycles=3, centre_cycle=None)` reads the candidate's
   RT x Q1-step patch from the spectra, the engine's `read_patch` rule, for the fragments and
   the unfragmented precursor's first three isotopes; only the row groups that hold its cells

@@ -811,7 +811,7 @@ def marker_key(d: PrecursorDetail, xr: dict[str, Any], zt: Any = None) -> Any:
             _key(
                 "apex",
                 rt_text(m.get("apex_rt")),
-                ZT_APEX_TEXT + ZT_POINT_TEXT[zt.has_steps]
+                ZT_APEX_TEXT + ZT_POINT_TEXT[zt.derived]
                 if zt is not None
                 else "apex_rt of the scored row",
                 "solid",
@@ -875,7 +875,7 @@ def marker_key(d: PrecursorDetail, xr: dict[str, Any], zt: Any = None) -> Any:
         items.append(
             _key(
                 "cycle trace",
-                "derived" if zt.has_steps else "engine",
+                "derived" if zt.derived else "engine",
                 ZT_CYCLE_KEY
                 + " "
                 + zt.label
@@ -1081,7 +1081,7 @@ def xic_card(
         sub += f" in {grid.size} grid scans"
     if zt is not None and zt.collapsed:
         n_cyc = max((t.cycles.size for t in zt.fragments), default=0)
-        who = "viewer-derived" if zt.has_steps else "the engine's cycle-level trace"
+        who = "viewer-derived" if zt.derived else "the engine's cycle-level trace"
         sub += f" ({n_cyc} Q1 cycles; one value per cycle, {who})"
     qf = d.quant_fragments
     if qf is not None and qf.available:

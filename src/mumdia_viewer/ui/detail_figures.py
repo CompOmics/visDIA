@@ -662,7 +662,7 @@ def _xic_figure_zt(
     zmode = zt_mode if zt_mode in ZT_MODES else "cycles"
     if not zt.collapsed:
         zmode = "steps"
-    # The engine's cycle-level traces: the chromatogram holds the cycles, no step samples.
+    # A development build's cycle traces in chromatograms.parquet: no step samples to draw.
     steps_drawn = zt.has_steps or not zt.collapsed
     if not steps_drawn:
         zmode = "cycles"
@@ -823,12 +823,12 @@ def _xic_figure_zt(
                     visible=True if visible_base and show_cycle else "legendonly",
                     hovertemplate=(
                         f"<b>{f.html}</b> · m/z {f.mz:.4f}<br>Q1 cycle %{{customdata[0]}}"
-                        + (" (%{customdata[1]} steps)" if zt.has_steps else "")
+                        + (" (%{customdata[1]} steps)" if zt.derived else "")
                         + "<br>RT %{x:.2f} s<br>"
                         f"cycle value %{{y:,.0f}}{word}{used_text}"
                         + (
                             "<br><i>viewer-derived: transmission-weighted collapse</i>"
-                            if zt.has_steps
+                            if zt.derived
                             else "<br><i>the engine's cycle-level trace</i>"
                         )
                         + "<extra></extra>"
