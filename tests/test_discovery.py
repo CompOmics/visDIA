@@ -359,6 +359,61 @@ def test_second_pass_evidence_and_library_come_from_the_second_pass(fixture_dir,
     )
 
 
+def _write_q1_traces(directory: Path) -> None:
+    """A ``chromatograms_q1.parquet`` (``extract.q1_traces``) beside the directory's
+    chromatograms: the same rows plus ``q1_class``, schema 5 or 6 by the layout."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from mumdia_viewer.data.schemas import chromatogram_layout
+
+    t = pq.read_table(directory / "chromatograms.parquet")
+    t = t.append_column("q1_class", pa.array([float("nan")] * t.num_rows, pa.float32()))
+    path = directory / "chromatograms_q1.parquet"
+    pq.write_table(t, path, compression="snappy")
+    report = {
+        "logical_name": "chromatograms_q1",
+        "schema_name": "chromatograms",
+        "schema_version": chromatogram_layout(t.schema).schema_version,
+        "stage": "extract",
+        "rows": t.num_rows,
+        "params": {"q1_traces": {}},
+    }
+    path.with_name(path.name + ".report.json").write_text(json.dumps(report), encoding="utf-8")
+
+
+def test_the_cycle_trace_table_follows_the_second_pass(fixture_dir, tmp_path: Path):
+    # extract.q1_traces writes chromatograms_q1.parquet beside each pass's chromatograms;
+    # the second pass's candidate ids differ, so a first-pass table must not be used.
+    root = _copy(fixture_dir("experiment"), tmp_path / "exp")
+    _make_second_pass(root, applied=True)
+    a, b = (
+        r for r in json.loads((root / "experiment_manifest.json").read_text())["experiment"]["runs"]
+    )
+    _write_q1_traces(root / str(a))
+    _write_q1_traces(root / "second_pass" / str(a))
+    _write_q1_traces(root / str(b))
+    rs = open_results(root)
+    assert not [n for n in rs.notices if n.code in ("unsupported_version", "layout")]
+    ra, rb = rs.runs
+    q1 = ra.artifacts["chromatograms_q1"]
+    assert q1.kind == "chromatograms" and q1.usable and q1.version.version in (5, 6)
+    assert q1.path == root / "second_pass" / str(a) / "chromatograms_q1.parquet"
+    assert "chromatograms_q1" not in rb.artifacts
+
+
+def test_the_cycle_trace_table_of_an_experiment_run(fixture_dir, tmp_path: Path):
+    root = _copy(fixture_dir("experiment"), tmp_path / "exp")
+    a = json.loads((root / "experiment_manifest.json").read_text())["experiment"]["runs"][0]
+    _write_q1_traces(root / str(a))
+    rs = open_results(root)
+    q1 = rs.runs[0].artifacts["chromatograms_q1"]
+    assert q1.path == root / str(a) / "chromatograms_q1.parquet" and q1.usable
+    assert "chromatograms_q1" not in rs.runs[1].artifacts
+    # chromatograms.parquet is still the run's chromatogram table.
+    assert rs.runs[0].artifacts["chromatograms"].path.name == "chromatograms.parquet"
+
+
 def test_a_second_pass_that_fell_back_changes_nothing(fixture_dir, tmp_path: Path):
     root = _copy(fixture_dir("experiment"), tmp_path / "exp")
     _make_second_pass(root, applied=False)

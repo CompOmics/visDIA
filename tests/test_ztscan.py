@@ -3,7 +3,7 @@
 The run is synthetic (:mod:`ztscan_fixture`): spectra_ms2 v3 with the Q1 sweep, cal.json
 with the Q1 calibration and psms_extracted v6 with the per-fragment decisions, the signal
 planted with known amplitudes through the calibrated transmission. The engine's
-cycle-level traces (chromatograms v5, psms_extracted v9) are the same run written with
+cycle-level traces (chromatograms_q1.parquet v5, psms_extracted v9) are the same run written with
 ``cycle_traces=True``. Tests marked ``real_data`` read ``MUMDIA_VIEWER_REAL_ZTSCAN`` (a MuMDIA
 0.12.0 ZT Scan run or experiment directory).
 """
@@ -19,11 +19,14 @@ from pathlib import Path
 
 import numpy as np
 import pyarrow as pa
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
 import pytest
 from plotly.io import to_json as to_json_plotly
 
 from mumdia_viewer.data import ViewerError, open_results
 from mumdia_viewer.data import ztscan as zt
+from mumdia_viewer.data.chromatograms import Q1TraceSource
 from mumdia_viewer.data.detail import precursor_detail
 from mumdia_viewer.data.errors import SchemaVersionError
 from mumdia_viewer.data.schemas import (
@@ -50,6 +53,15 @@ def zrun(tmp_path_factory):
 @pytest.fixture(scope="module")
 def zcyc(tmp_path_factory):
     truth = build_ztscan_run(tmp_path_factory.mktemp("zt_cycles"), cycle_traces=True)
+    return truth, open_results(truth.root)
+
+
+@pytest.fixture(scope="module")
+def zdev(tmp_path_factory):
+    """A development build's layout: the cycle traces in chromatograms.parquet itself."""
+    truth = build_ztscan_run(
+        tmp_path_factory.mktemp("zt_dev"), cycle_traces=True, traces_in="chromatograms"
+    )
     return truth, open_results(truth.root)
 
 
@@ -242,14 +254,77 @@ def test_cycle_traces_recover_the_planted_amplitudes(zrun):
     assert all(np.all(np.diff(m.cycles) == 1) for m in ct.ms1)
 
 
-def test_engine_cycle_traces_are_taken_as_written(zcyc):
-    truth, rs = zcyc
+def test_the_cycle_trace_table_is_found(zcyc):
+    _, rs = zcyc
+    run = rs.runs[0]
+    assert not rs.notices
+    art = run.artifact("chromatograms_q1")
+    assert art is not None and art.usable and art.kind == "chromatograms"
+    assert art.path.name == "chromatograms_q1.parquet" and art.version.version == 5
+    # chromatograms.parquet keeps the per-step traces.
+    assert run.artifact("chromatograms").version.version == 1
+    src = Q1TraceSource.for_run(rs, run)
+    assert src is Q1TraceSource.for_run(rs, run)  # memoised
+    assert src.tables[0].layout.q1_traces
+
+
+def test_the_cycle_trace_table_without_a_manifest_record(tmp_path):
+    truth = build_ztscan_run(tmp_path / "zt", cycle_traces=True)
+    m = json.loads((truth.root / "manifest.json").read_text(encoding="utf-8"))
+    del m["artifacts"]["chromatograms_q1"]
+    (truth.root / "manifest.json").write_text(json.dumps(m), encoding="utf-8")
+    rs = open_results(truth.root)
+    art = rs.runs[0].artifact("chromatograms_q1")
+    assert art is not None and art.version.version == 5 and art.version.source == "report"
+    assert zt.cycle_traces(rs, precursor_detail(rs, rs.runs[0], 0)).source == "engine"
+
+
+def test_without_the_cycle_trace_table_the_viewer_derives_them(zrun):
+    _, rs = zrun
+    assert rs.runs[0].artifact("chromatograms_q1") is None
+    assert Q1TraceSource.for_run(rs, rs.runs[0]) is None
+    d = precursor_detail(rs, rs.runs[0], 0)
+    assert zt.engine_cycle_chromatogram(rs, d) == (None, None)
+
+
+def test_a_candidate_missing_from_the_cycle_trace_table_falls_back(tmp_path):
+    truth = build_ztscan_run(tmp_path / "zt", cycle_traces=True)
+    path = truth.root / "chromatograms_q1.parquet"
+    t = pq.read_table(path)
+    keep = pc.not_equal(t.column("candidate_id"), pa.scalar(0, pa.uint32()))
+    pq.write_table(t.filter(keep), path, compression="snappy")
+    m = json.loads((truth.root / "manifest.json").read_text(encoding="utf-8"))
+    m["artifacts"]["chromatograms_q1"]["rows"] = None
+    (truth.root / "manifest.json").write_text(json.dumps(m), encoding="utf-8")
+    rs = open_results(truth.root)
+    d = precursor_detail(rs, rs.runs[0], 0)
+    ct = zt.cycle_traces(rs, d)
+    assert ct.source == "viewer" and ct.has_steps
+    assert any("no rows for this candidate" in n for n in ct.notes)
+    assert zt.cycle_traces(rs, precursor_detail(rs, rs.runs[0], 1)).source == "engine"
+
+
+def test_engine_cycle_traces_of_a_development_build(zdev):
+    truth, rs = zdev
+    assert rs.runs[0].artifact("chromatograms_q1") is None
     d = precursor_detail(rs, rs.runs[0], 0)
     assert d.chromatogram.layout.schema_version == 5
     ct = zt.cycle_traces(rs, d)
-    assert ct.source == "engine" and not ct.has_steps and ct.label == zt.ENGINE_CYCLE_LABEL
+    assert ct.source == "engine" and not ct.has_steps and not ct.steps_in_chromatogram
+    assert [t.q1_class for t in ct.fragments] == truth.cands[0].classes
+
+
+def test_engine_cycle_traces_are_taken_as_written(zcyc):
+    truth, rs = zcyc
+    d = precursor_detail(rs, rs.runs[0], 0)
+    assert d.chromatogram.layout.schema_version == 1  # the per-step traces
+    ct = zt.cycle_traces(rs, d)
+    assert ct.source == "engine" and not ct.derived and ct.label == zt.ENGINE_CYCLE_LABEL
+    assert ct.has_steps and ct.steps_in_chromatogram  # chromatograms.parquet keeps the steps
     c0 = truth.cands[0]
-    frags = d.chromatogram.fragments()
+    q1t, why = zt.engine_cycle_chromatogram(rs, d)
+    assert why is None and q1t.layout.schema_version == 5
+    frags = q1t.fragments()
     assert [t.q1_class for t in frags] == c0.classes
     for t, tr in zip(ct.fragments, frags, strict=True):
         np.testing.assert_array_equal(t.value, tr.intensity.astype(np.float64))
@@ -426,13 +501,25 @@ def test_the_page_of_a_zt_run(zrun):
 def test_the_page_of_a_run_with_engine_cycle_traces(zcyc):
     _, rs = zcyc
     tree = detail_page.layout(PageContext(rs=rs, base="/t/", query={"run": "", "cid": "0"}))
-    assert _has(tree, "pd-zt-card") and not _has(tree, "pd-xic-zt")
-    assert "the engine's cycle-level trace" in to_json_plotly(tree)
+    # chromatograms.parquet keeps the per-step samples, so the cycles/steps switch is there.
+    assert _has(tree, "pd-zt-card") and _has(tree, "pd-xic-zt")
+    text = to_json_plotly(tree)
+    assert "the engine's cycle-level trace" in text
     d = precursor_detail(rs, rs.runs[0], 0)
     ct, _ = ztc.zt_traces(rs, d)
     fig = dfig.xic_figure(d, fragments_of(d.chromatogram), scan_grid(rs, d), zt=ct, zt_mode="both")
-    assert fig.layout.meta["zt"] == "cycles"
-    assert not [t for t in _zt_traces(fig) if t.meta["zt"] == "step"]
+    assert fig.layout.meta["zt"] == "both"
+    steps = [t for t in _zt_traces(fig) if t.meta["zt"] == "step"]
+    cycles = [t for t in _zt_traces(fig) if t.meta["zt"] == "cycle"]
+    assert steps and cycles
+    # The cycle points are the engine's values, the step samples the chromatogram's own.
+    q1t, _ = zt.engine_cycle_chromatogram(rs, d)
+    c2 = next(t for t in cycles if t.meta["frag"] == 2)
+    np.testing.assert_allclose(
+        np.asarray(c2.y, dtype=float), q1t.fragments()[2].intensity, rtol=1e-3, atol=0.1
+    )
+    s2 = next(t for t in steps if t.meta["frag"] == 2)
+    assert len(s2.x) == d.chromatogram.fragments()[2].rt.size > len(c2.x)
     # The engine's separable model (psms_extracted v9): A_f * E_c at the model's cycle RTs.
     model = {t.meta["frag"]: t for t in _zt_traces(fig) if t.meta.get("model")}
     truth, _ = zcyc
@@ -455,6 +542,17 @@ def test_the_page_of_a_run_with_engine_cycle_traces(zcyc):
         detail_page.get_detail,
     )
     assert "model R" in json.dumps(table.to_plotly_json(), default=str)
+
+
+def test_the_page_of_a_development_build(zdev):
+    _, rs = zdev
+    tree = detail_page.layout(PageContext(rs=rs, base="/t/", query={"run": "", "cid": "0"}))
+    assert _has(tree, "pd-zt-card") and not _has(tree, "pd-xic-zt")
+    d = precursor_detail(rs, rs.runs[0], 0)
+    ct, _ = ztc.zt_traces(rs, d)
+    fig = dfig.xic_figure(d, fragments_of(d.chromatogram), scan_grid(rs, d), zt=ct, zt_mode="both")
+    assert fig.layout.meta["zt"] == "cycles"
+    assert not [t for t in _zt_traces(fig) if t.meta["zt"] == "step"]
 
 
 def test_the_q1_card_callback(zrun):
@@ -643,10 +741,17 @@ def test_real_zt_run_cycle_traces_and_patch():
         "AND source = $s ORDER BY candidate_id LIMIT 4000",
         {"p": str(rs.scored.require()), "s": run.index},
     )
+    # With extract.q1_traces the engine's cycle traces (chromatograms_q1.parquet) are drawn;
+    # without, the viewer derives them from the per-step traces of chromatograms.parquet.
+    engine = run.artifact("chromatograms_q1") is not None
     for cid in df["candidate_id"].to_numpy()[::1000]:
         d = precursor_detail(rs, run, int(cid))
         ct = zt.cycle_traces(rs, d)
         assert ct.collapsed
+        assert ct.source == ("engine" if engine else "viewer"), ct.notes
+        assert d.chromatogram.layout.schema_version in (1, 2)  # per-step traces
+        if engine:
+            assert ct.classes and set(ct.classes.values()) <= {0, 1, 2}
         for t in ct.fragments:
             assert np.all(np.diff(t.cycles) >= 1)
         p = zt.q1_patch(rs, d)

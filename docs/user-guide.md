@@ -92,8 +92,13 @@ intensity at full transmission; it is drawn at the mean retention time of the cy
 samples. The values are viewer-derived and say so. **Cycles + steps** adds the per-step
 samples faintly behind them; **Steps** shows the samples alone, as on any other run. A
 click on a cycle shows the cycle's middle step in the spectrum mirror. When the engine
-wrote cycle-level traces itself (`extract.q1_traces`, chromatograms version 5 or 6) the
-XIC shows them as the engine's, with no step samples to switch to; with the separable
+wrote cycle-level traces itself (`extract.q1_traces`: `chromatograms_q1.parquet` beside the
+run's `chromatograms.parquet`, chromatograms version 5 or 6) the XIC draws those as the
+engine's cycle traces, and the step samples behind them still come from
+`chromatograms.parquet`, which keeps the per-step traces that quant integrates. A candidate
+the cycle-trace table does not hold falls back to the viewer's collapse, with a note. (A
+development build of the engine wrote the cycle traces into `chromatograms.parquet` itself;
+such a run shows them with no step samples to switch to.) With the separable
 RT x Q1 model (`features.q1_separable`, `psms_extracted` version 9) each fragment's model
 trace, `q1s_frag_amp` x `q1s_elution`, is drawn dotted.
 

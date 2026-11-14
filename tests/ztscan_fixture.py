@@ -4,9 +4,11 @@ The run is small but has the layout MuMDIA 0.12.0 writes for a ZT Scan run: ``sp
 v3 with the Q1 sweep (``q1_cycle``, ``q1_step``), ``cal.json`` with ``q1_calibration``,
 ``psms_extracted`` v6 with the per-fragment Q1 decisions (``q1f_*``, the model in the report's
 ``params.q1_fragments``) and the chromatograms of the candidates: one sample per covering
-step (layout 1, version 1), or with ``cycle_traces=True`` the engine's cycle-level traces of
-``extract.q1_traces`` (layout 1 plus ``q1_class``, version 5, and ``psms_extracted`` v9 with
-two of the separable-model columns).
+step (layout 1, version 1). With ``cycle_traces=True`` the engine's cycle-level traces of
+``extract.q1_traces`` are added as ``chromatograms_q1.parquet`` (layout 1 plus ``q1_class``,
+version 5, manifest key ``chromatograms_q1``), and ``psms_extracted`` is v9 with some of the
+separable-model columns; ``traces_in="chromatograms"`` writes them into
+``chromatograms.parquet`` instead, as development builds of the engine did.
 
 The signal is planted with known values. The quadrupole sweeps 60 steps 0.7614 m/z apart
 (targets 500.0 to 544.9) in 1 s cycles, each step read as +-1.9 m/z. Every fragment of a
@@ -180,12 +182,19 @@ def ms1_rt(cycle: int) -> float:
 
 
 def _write(
-    table: pa.Table, path: Path, schema: str, version: int, stage: str, params=None, rgs=None
+    table: pa.Table,
+    path: Path,
+    schema: str,
+    version: int,
+    stage: str,
+    params=None,
+    rgs=None,
+    logical_name: str | None = None,
 ):
     path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, path, row_group_size=rgs or max(table.num_rows, 1), compression="snappy")
     report = {
-        "logical_name": schema,
+        "logical_name": logical_name or schema,
         "schema_name": schema,
         "schema_version": version,
         "stage": stage,
@@ -198,7 +207,7 @@ def _write(
     }
     path.with_name(path.name + ".report.json").write_text(json.dumps(report), encoding="utf-8")
     return {
-        "logical_name": schema,
+        "logical_name": logical_name or schema,
         "path": str(path),
         "format": "parquet",
         "schema_name": schema,
@@ -216,7 +225,9 @@ def _list(values: list[np.ndarray]) -> pa.Array:
     )
 
 
-def build_ztscan_run(root: Path, *, cycle_traces: bool = False, seed: int = 7) -> Truth:
+def build_ztscan_run(
+    root: Path, *, cycle_traces: bool = False, traces_in: str = "sidecar", seed: int = 7
+) -> Truth:
     """Write the synthetic ZT Scan run into ``root`` (see the module docstring)."""
     root = Path(root)
     (root / "spectra").mkdir(parents=True, exist_ok=True)
@@ -382,7 +393,9 @@ def build_ztscan_run(root: Path, *, cycle_traces: bool = False, seed: int = 7) -
     ms2_cyc = np.asarray(rows["cyc"])
     ms2_stp = np.asarray(rows["stp"])
     ms1_rt_arr = np.asarray(ms1["rt"])
-    chrom = {k: [] for k in ("cid", "name", "mz", "pred", "rt", "it", "q1")}
+    keys = ("cid", "name", "mz", "pred", "rt", "it", "q1")
+    steps = {k: [] for k in keys}
+    cyc = {k: [] for k in keys}
     for c in cands:
         lo, hi = c.apex_rt - WINDOW_S, c.apex_rt + WINDOW_S
         cover = (targets - HALF <= c.pm) & (c.pm <= targets + HALF)
@@ -396,34 +409,32 @@ def build_ztscan_run(root: Path, *, cycle_traces: bool = False, seed: int = 7) -
             return float(np.float32(its[(ps >= mz - d) & (ps <= mz + d)].sum()))
 
         sp = zt.ISOTOPE_SPACING / c.z
-        if not cycle_traces:
-            axis = ms2_rt_arr[grid].astype(np.float32)
-            for f, name in enumerate(c.names):
-                vals = np.array(
-                    [planted[(int(ms2_cyc[g]), int(ms2_stp[g]))].get(c.mz[f], 0.0) for g in grid],
-                    dtype=np.float32,
-                )
-                observed = bool(np.any(vals > 0))
-                chrom["cid"].append(c.cid)
-                chrom["name"].append(name)
-                chrom["mz"].append(c.mz[f])
-                chrom["pred"].append(1.0 - 0.05 * f)
-                chrom["rt"].append(axis if observed else np.zeros(0, np.float32))
-                chrom["it"].append(vals if observed else np.zeros(0, np.float32))
-                chrom["q1"].append(float(c.classes[f]))
-            for k, name in enumerate(("ms1_mono", "ms1_iso1", "ms1_iso2")):
-                chrom["cid"].append(c.cid)
-                chrom["name"].append(name)
-                chrom["mz"].append(c.pm + k * sp)
-                chrom["pred"].append(0.0)
-                chrom["rt"].append(axis)
-                chrom["it"].append(
-                    np.array(
-                        [ms1_at(float(r), c.pm + k * sp) for r in ms2_rt_arr[grid]], np.float32
-                    )
-                )
-                chrom["q1"].append(float("nan"))
-        else:
+        # One sample per covering step, as chromatograms.parquet always holds.
+        axis = ms2_rt_arr[grid].astype(np.float32)
+        for f, name in enumerate(c.names):
+            vals = np.array(
+                [planted[(int(ms2_cyc[g]), int(ms2_stp[g]))].get(c.mz[f], 0.0) for g in grid],
+                dtype=np.float32,
+            )
+            observed = bool(np.any(vals > 0))
+            steps["cid"].append(c.cid)
+            steps["name"].append(name)
+            steps["mz"].append(c.mz[f])
+            steps["pred"].append(1.0 - 0.05 * f)
+            steps["rt"].append(axis if observed else np.zeros(0, np.float32))
+            steps["it"].append(vals if observed else np.zeros(0, np.float32))
+            steps["q1"].append(float(c.classes[f]))
+        for k, name in enumerate(("ms1_mono", "ms1_iso1", "ms1_iso2")):
+            steps["cid"].append(c.cid)
+            steps["name"].append(name)
+            steps["mz"].append(c.pm + k * sp)
+            steps["pred"].append(0.0)
+            steps["rt"].append(axis)
+            steps["it"].append(
+                np.array([ms1_at(float(r), c.pm + k * sp) for r in ms2_rt_arr[grid]], np.float32)
+            )
+            steps["q1"].append(float("nan"))
+        if cycle_traces:  # one point per Q1 cycle (extract.q1_traces)
             cycles = np.unique(ms2_cyc[grid])
             rep_step = int(np.argmin(np.abs(targets - c.model.centre)))
             cyc_rt = np.array([ms2_rt(int(k), rep_step) for k in cycles])
@@ -438,49 +449,77 @@ def build_ztscan_run(root: Path, *, cycle_traces: bool = False, seed: int = 7) -
                     vals.append(float(np.sum(w * x)) / sww if sww > 0 else 0.0)
                 vals = np.asarray(vals, dtype=np.float32)
                 observed = bool(np.any(vals > 0))
-                chrom["cid"].append(c.cid)
-                chrom["name"].append(name)
-                chrom["mz"].append(c.mz[f])
-                chrom["pred"].append(1.0 - 0.05 * f)
-                chrom["rt"].append(axis if observed else np.zeros(0, np.float32))
-                chrom["it"].append(vals if observed else np.zeros(0, np.float32))
-                chrom["q1"].append(float(c.classes[f]))
+                cyc["cid"].append(c.cid)
+                cyc["name"].append(name)
+                cyc["mz"].append(c.mz[f])
+                cyc["pred"].append(1.0 - 0.05 * f)
+                cyc["rt"].append(axis if observed else np.zeros(0, np.float32))
+                cyc["it"].append(vals if observed else np.zeros(0, np.float32))
+                cyc["q1"].append(float(c.classes[f]))
             for k, name in enumerate(("ms1_mono", "ms1_iso1", "ms1_iso2")):
-                chrom["cid"].append(c.cid)
-                chrom["name"].append(name)
-                chrom["mz"].append(c.pm + k * sp)
-                chrom["pred"].append(0.0)
-                chrom["rt"].append(axis)
-                chrom["it"].append(
+                cyc["cid"].append(c.cid)
+                cyc["name"].append(name)
+                cyc["mz"].append(c.pm + k * sp)
+                cyc["pred"].append(0.0)
+                cyc["rt"].append(axis)
+                cyc["it"].append(
                     np.array([ms1_at(float(r), c.pm + k * sp) for r in cyc_rt], np.float32)
                 )
-                chrom["q1"].append(float("nan"))
-    ct = {
-        "candidate_id": pa.array(chrom["cid"], pa.uint32()),
-        "frag_name": pa.array(chrom["name"], pa.string()),
-        "frag_mz": pa.array(chrom["mz"], pa.float64()),
-        "frag_obs_mz": pa.array(chrom["mz"], pa.float64()),
-        "predicted_intensity": pa.array(chrom["pred"], pa.float32()),
-        "rt": _list(chrom["rt"]),
-        "intensity": _list(chrom["it"]),
-    }
+                cyc["q1"].append(float("nan"))
+
     params = {
         "effective_frag_tol_ppm": TOL_PPM,
         "frag_ppm_offset": 0.0,
         "frag_tol_ppm": TOL_PPM,
         "q1_fragments": MODEL_BLOCK,
     }
-    if cycle_traces:
-        ct["q1_class"] = pa.array(chrom["q1"], pa.float32())
-        params = {**params, "q1_traces": {"apex_on_cycles": True, "gate_cycles": 3}}
-    records["chromatograms"] = _write(
-        pa.table(ct),
-        root / "chromatograms.parquet",
-        "chromatograms",
-        5 if cycle_traces else 1,
-        "extract",
-        params,
-    )
+
+    def chrom_table(chrom: dict[str, list], q1_class: bool) -> pa.Table:
+        ct = {
+            "candidate_id": pa.array(chrom["cid"], pa.uint32()),
+            "frag_name": pa.array(chrom["name"], pa.string()),
+            "frag_mz": pa.array(chrom["mz"], pa.float64()),
+            "frag_obs_mz": pa.array(chrom["mz"], pa.float64()),
+            "predicted_intensity": pa.array(chrom["pred"], pa.float32()),
+            "rt": _list(chrom["rt"]),
+            "intensity": _list(chrom["it"]),
+        }
+        if q1_class:
+            ct["q1_class"] = pa.array(chrom["q1"], pa.float32())
+        return pa.table(ct)
+
+    q1t_params = {
+        "q1_traces": {"of": str(root / "chromatograms.parquet"), "candidates_without_cycles": 0}
+    }
+    if cycle_traces and traces_in == "chromatograms":
+        # A development build of the engine wrote the cycle traces into chromatograms.parquet.
+        records["chromatograms"] = _write(
+            chrom_table(cyc, True),
+            root / "chromatograms.parquet",
+            "chromatograms",
+            5,
+            "extract",
+            {**params, **q1t_params},
+        )
+    else:
+        records["chromatograms"] = _write(
+            chrom_table(steps, False),
+            root / "chromatograms.parquet",
+            "chromatograms",
+            1,
+            "extract",
+            params,
+        )
+    if cycle_traces and traces_in == "sidecar":
+        records["chromatograms_q1"] = _write(
+            chrom_table(cyc, True),
+            root / "chromatograms_q1.parquet",
+            "chromatograms",
+            5,
+            "extract",
+            q1t_params,
+            logical_name="chromatograms_q1",
+        )
 
     # psms_extracted.
     n = len(cands)

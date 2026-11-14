@@ -50,6 +50,9 @@ RUN_FILES: dict[str, str] = {
     "features": "features.parquet",
     "psms_competed": "psms_competed.parquet",
     "chromatograms": "chromatograms.parquet",
+    # SCIEX ZT Scan DIA under `extract.q1_traces`: the same traces once more on Q1 cycles
+    # (chromatograms schema 5 or 6, logical name `chromatograms_q1`). No stage reads it.
+    "chromatograms_q1": "chromatograms_q1.parquet",
     "run_windows": "run_windows.parquet",
     "seed_psms": "seed_psms.parquet",
     "peptide_quant": "peptide_quant.parquet",
@@ -73,9 +76,13 @@ SECOND_PASS_RUN_FILES: tuple[str, ...] = (
     "features",
     "psms_competed",
     "chromatograms",
+    "chromatograms_q1",
     "run_windows",
     "seed_psms",
 )
+
+# The schema a run file is read as, where its key is not the schema name.
+RUN_FILE_SCHEMAS: dict[str, str] = {"chromatograms_q1": "chromatograms"}
 
 # Fixed file names inside a band directory ``groups/gNN``.
 BAND_FILES: dict[str, str] = {
@@ -758,6 +765,10 @@ def _open_single(
     peaks = _peaks_sidecar(b, root, "psms_extracted_peaks")
     if peaks is not None:
         artifacts["psms_extracted_peaks"] = peaks
+    if "chromatograms_q1" not in artifacts:  # the manifest of a development build lacks it
+        q1t = b.from_path("chromatograms", "chromatograms_q1", root / RUN_FILES["chromatograms_q1"])
+        if q1t is not None:
+            artifacts["chromatograms_q1"] = q1t
     grouped = _grouped_layout(b, root, band_records, "", artifacts)
     run = Run(
         name="",
@@ -947,7 +958,7 @@ def _open_experiment(
             if kind in artifacts:
                 continue
             fixed = run_root / ("scored.parquet" if kind == "psms_scored" else rel)
-            found = b.from_path(kind, f"{kind}[{name}]", fixed)
+            found = b.from_path(RUN_FILE_SCHEMAS.get(kind, kind), f"{kind}[{name}]", fixed)
             if found is not None:
                 artifacts[kind] = found
         peaks = _peaks_sidecar(b, run_root, f"psms_extracted_peaks[{name}]")
@@ -958,7 +969,7 @@ def _open_experiment(
         if sp_root is not None:
             for kind in SECOND_PASS_RUN_FILES:
                 found = b.from_path(
-                    kind,
+                    RUN_FILE_SCHEMAS.get(kind, kind),
                     f"{kind}[{name}]",
                     sp_root / RUN_FILES[kind],
                     resolution="second pass",
